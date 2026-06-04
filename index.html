@@ -1,0 +1,988 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>TLC Rf 계산기</title>
+<style>
+:root{
+  --bg:#ffffff; --bg2:#f7f8fa; --bg3:#eef0f4;
+  --tx:#1a1c21; --tx2:#4a5060; --tx3:#9099aa;
+  --bd:#e2e4e9; --bd2:#d0d4dc;
+  --blue:#1a6bb5; --blue-bg:#e8f0fa; --blue-bd:#b5d4f4;
+  --green:#1D9E75; --green-bg:#eaf3de; --green-bd:#9FE1CB;
+  --org:#BA7517;  --org-bg:#faeeda;  --org-bd:#EF9F27;
+  --red:#c0392b;  --red-bg:#fcebeb;  --red-bd:#fca5a5;
+  --f:'Pretendard','Apple SD Gothic Neo',-apple-system,BlinkMacSystemFont,sans-serif;
+  --fm:'JetBrains Mono','Fira Code',ui-monospace,monospace;
+}
+*{box-sizing:border-box; margin:0; padding:0;}
+html,body{height:100%;}
+body{
+  font-family:var(--f); color:var(--tx); background:var(--bg3);
+  font-size:15px; -webkit-font-smoothing:antialiased; overflow:hidden;
+  display:flex; flex-direction:column;
+}
+
+/* 상단바 */
+.topbar{
+  flex-shrink:0; height:62px; background:var(--bg);
+  border-bottom:1px solid var(--bd); padding:0 22px;
+  display:flex; align-items:center; justify-content:space-between;
+}
+.brand{display:flex; align-items:baseline; gap:11px;}
+.logo{font-size:21px; font-weight:700; color:var(--blue); letter-spacing:-.5px;}
+.logo span{color:var(--tx);}
+.brand-sub{font-size:12px; color:var(--tx3); font-weight:500;}
+.top-right{display:flex; align-items:center; gap:10px;}
+
+/* 버튼 */
+.btn{font-family:var(--f); font-size:13px; font-weight:500; padding:8px 14px;
+  border-radius:9px; border:1px solid var(--bd2); background:var(--bg);
+  color:var(--tx); cursor:pointer; display:inline-flex; align-items:center; gap:6px;
+  min-height:38px; transition:background .12s,border-color .12s; white-space:nowrap;}
+.btn:hover{background:var(--bg2);}
+.btn:active{transform:translateY(1px);}
+.btn:disabled{opacity:.4; cursor:not-allowed;}
+.btn-p{background:var(--blue); color:#fff; border-color:var(--blue);}
+.btn-p:hover{background:#155a9a;}
+.btn-g{background:var(--green); color:#fff; border-color:var(--green);}
+.btn-g:hover{background:#178a66;}
+.btn-sm{font-size:12px; padding:6px 11px; min-height:32px;}
+.btn-warn{background:var(--org-bg); color:#8a5a12; border-color:var(--org-bd);}
+.btn-warn:hover{filter:brightness(.98);}
+.btn-danger{color:var(--red); border-color:var(--red-bd); background:var(--red-bg);}
+
+/* 스텝퍼 */
+.stepper{flex-shrink:0; background:var(--bg); border-bottom:1px solid var(--bd);
+  display:flex; align-items:center; gap:4px; padding:9px 22px; overflow-x:auto;}
+.step{display:flex; align-items:center; gap:8px; padding:5px 12px; border-radius:20px;
+  font-size:13px; color:var(--tx3); font-weight:500; white-space:nowrap; cursor:default;}
+.step .n{width:21px; height:21px; border-radius:50%; display:grid; place-items:center;
+  background:var(--bg3); color:var(--tx3); font-size:12px; font-weight:600; font-family:var(--fm);}
+.step.active{background:var(--blue-bg); color:var(--blue);}
+.step.active .n{background:var(--blue); color:#fff;}
+.step.done{color:var(--green);}
+.step.done .n{background:var(--green); color:#fff;}
+.step.clickable{cursor:pointer;}
+.step.clickable:hover{background:var(--bg2);}
+.step-arrow{color:var(--bd2); font-size:13px;}
+
+/* 본문 레이아웃 */
+.main{flex:1; display:flex; min-height:0; overflow:hidden;}
+.stage{flex:1; min-width:0; position:relative; display:flex; align-items:center;
+  justify-content:center; padding:18px; background:
+   repeating-conic-gradient(#e7e9ee 0% 25%, #eef0f4 0% 50%) 50%/22px 22px;}
+.canvas-wrap{position:relative; max-width:100%; max-height:100%; display:none;
+  box-shadow:0 4px 20px rgba(20,30,50,.13); border-radius:4px; overflow:hidden; background:#fff;}
+#cv{display:block; max-width:100%; max-height:calc(100vh - 200px);
+  touch-action:none; cursor:crosshair;}
+
+/* 드롭존 */
+.drop{width:min(560px,92%); border:2.5px dashed var(--bd2); border-radius:18px;
+  background:var(--bg); padding:48px 30px; text-align:center; transition:.15s; cursor:pointer;}
+.drop.over{border-color:var(--blue); background:var(--blue-bg);}
+.drop .big{font-size:46px; margin-bottom:14px;}
+.drop h2{font-size:19px; font-weight:600; margin-bottom:8px;}
+.drop p{font-size:13.5px; color:var(--tx2); line-height:1.7;}
+.drop kbd{font-family:var(--fm); font-size:12px; background:var(--bg3); border:1px solid var(--bd2);
+  border-radius:5px; padding:1px 7px;}
+
+/* 우측 패널 */
+.panel{flex-shrink:0; width:340px; background:var(--bg); border-left:1px solid var(--bd);
+  display:flex; flex-direction:column; min-height:0;}
+.panel-body{flex:1; overflow-y:auto; padding:20px; min-height:0;}
+.panel-body::-webkit-scrollbar{width:7px;}
+.panel-body::-webkit-scrollbar-thumb{background:var(--bd2); border-radius:4px;}
+.panel-foot{flex-shrink:0; border-top:1px solid var(--bd); padding:14px 18px;
+  display:flex; gap:8px; justify-content:space-between;}
+.ptitle{font-size:16px; font-weight:600; margin-bottom:4px; display:flex; align-items:center; gap:8px;}
+.ptitle .ico{width:25px; height:25px; display:grid; place-items:center; border-radius:7px;
+  background:var(--blue-bg); color:var(--blue); font-size:14px;}
+.phelp{font-size:13px; color:var(--tx2); line-height:1.65; margin-bottom:16px;}
+.phelp b{color:var(--tx);}
+.psec{margin-bottom:16px;}
+.psec h4{font-size:12px; font-weight:600; color:var(--tx3); text-transform:uppercase;
+  letter-spacing:.4px; margin-bottom:9px;}
+.field{display:flex; align-items:center; gap:10px; margin-bottom:10px;}
+.field label{font-size:13px; color:var(--tx2); flex:1;}
+.field .val{font-family:var(--fm); font-size:13px; font-weight:600; min-width:54px; text-align:right;}
+input[type=range]{flex:1.6; accent-color:var(--blue);}
+.row-btns{display:flex; gap:7px; flex-wrap:wrap;}
+.legend{display:flex; flex-direction:column; gap:7px; font-size:12.5px; color:var(--tx2);}
+.legend .li{display:flex; align-items:center; gap:9px;}
+.legend .sw{width:15px; height:15px; border-radius:4px; flex-shrink:0;}
+.legend .sw.line{height:3px; border-radius:2px;}
+
+/* 결과 테이블 */
+.tbl{width:100%; border-collapse:collapse; font-size:13px;}
+.tbl th,.tbl td{text-align:left; padding:7px 9px; border-bottom:1px solid var(--bd);}
+.tbl th{font-size:11px; color:var(--tx3); text-transform:uppercase; letter-spacing:.3px; font-weight:600;}
+.tbl td.rf{font-family:var(--fm); font-weight:600; color:var(--blue);}
+.tbl .dot{width:11px; height:11px; border-radius:50%; display:inline-block; vertical-align:middle;}
+.tbl input.lbl{width:84px; font-family:var(--fm); font-size:12.5px; padding:3px 6px;
+  border:1px solid var(--bd); border-radius:6px; background:var(--bg2); color:var(--tx);}
+.tbl input.lbl:focus{outline:none; border-color:var(--blue); background:#fff;}
+
+/* 토스트 */
+.toast{position:fixed; left:50%; bottom:26px; transform:translateX(-50%) translateY(20px);
+  background:#23262d; color:#fff; font-size:13.5px; padding:11px 20px; border-radius:11px;
+  opacity:0; pointer-events:none; transition:.22s; z-index:50; box-shadow:0 6px 22px rgba(0,0,0,.25);}
+.toast.show{opacity:1; transform:translateX(-50%) translateY(0);}
+
+.muted{color:var(--tx3); font-size:12px;}
+.hide{display:none !important;}
+.pill{display:inline-block; font-family:var(--fm); font-size:12px; background:var(--bg3);
+  border-radius:6px; padding:2px 8px; margin:0 2px;}
+@media (max-width:980px){ .panel{width:300px;} }
+
+/* ── 모바일: 세로로 길어 오른쪽 패널을 캔버스 아래로 스택 ── */
+@media (max-width:680px){
+  html,body{ height:auto; min-height:100%; }
+  body{ overflow-y:auto; overflow-x:hidden; }
+  .topbar{ height:auto; min-height:52px; padding:8px 12px; flex-wrap:wrap; gap:6px; }
+  .brand-sub{ display:none; }
+  .logo{ font-size:18px; }
+  .top-right{ gap:7px; }
+  .top-right .btn{ min-height:34px; padding:7px 11px; font-size:12.5px; }
+  .stepper{ padding:8px 12px; gap:2px; }
+  .step{ padding:5px 9px; font-size:12px; }
+
+  /* 좌우 → 상하 스택 */
+  .main{ flex-direction:column; flex:none; overflow:visible; }
+  .stage{ flex:none; padding:12px; }
+  .canvas-wrap{ max-height:none; }
+  #cv{ max-height:54vh; }                 /* 캔버스는 화면 절반 정도, 아래 패널 확보 */
+
+  .panel{ width:100%; border-left:0; border-top:1px solid var(--bd); }
+  .panel-body{ flex:none; overflow:visible; padding:16px; }
+  /* 이전/다음 버튼은 항상 닿도록 하단 고정 */
+  .panel-foot{ position:sticky; bottom:0; background:var(--bg);
+    box-shadow:0 -2px 8px rgba(20,30,50,.06); }
+  .panel-foot .btn{ flex:1; justify-content:center; min-height:46px; font-size:15px; }
+  .drop{ padding:34px 20px; }
+}
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="brand">
+    <span class="logo">TLC<span> Rf</span></span>
+    <span class="brand-sub">박층 크로마토그래피 Rf 자동 계산</span>
+  </div>
+  <div class="top-right">
+    <button class="btn btn-warn" id="btnAuto" disabled>⚡ 전자동 분석</button>
+    <button class="btn btn-sm" id="btnReset">새 이미지</button>
+  </div>
+</div>
+
+<div class="stepper" id="stepper">
+  <div class="step active" data-step="1"><span class="n">1</span>불러오기</div>
+  <span class="step-arrow">›</span>
+  <div class="step" data-step="2"><span class="n">2</span>플레이트 보정</div>
+  <span class="step-arrow">›</span>
+  <div class="step" data-step="3"><span class="n">3</span>기준선</div>
+  <span class="step-arrow">›</span>
+  <div class="step" data-step="4"><span class="n">4</span>Spot</div>
+  <span class="step-arrow">›</span>
+  <div class="step" data-step="5"><span class="n">5</span>결과</div>
+</div>
+
+<div class="main">
+  <div class="stage" id="stage">
+    <div class="drop" id="drop">
+      <div class="big">🧪</div>
+      <h2>TLC 사진을 올려 주세요</h2>
+      <p>
+        클릭해서 파일 선택 · 여기로 <b>드래그&드롭</b> ·
+        클립보드 캡처는 <kbd>Ctrl</kbd>+<kbd>V</kbd> 로 붙여넣기<br>
+        <span class="muted">원본 사진(배경 포함)도, 플레이트만 잘라낸 이미지도 모두 가능합니다.</span>
+      </p>
+    </div>
+    <div class="canvas-wrap" id="cvWrap"><canvas id="cv"></canvas></div>
+  </div>
+
+  <div class="panel">
+    <div class="panel-body" id="panelBody"></div>
+    <div class="panel-foot">
+      <button class="btn" id="btnPrev">‹ 이전</button>
+      <button class="btn btn-p" id="btnNext">다음 ›</button>
+    </div>
+  </div>
+</div>
+
+<input type="file" id="file" accept="image/*" class="hide"/>
+<div class="toast" id="toast"></div>
+
+<script>
+"use strict";
+/* ════════════════════════════════════════════════════════════
+   TLC Rf 계산기 — 순수 JS, 완전 오프라인, 외부 의존성 없음
+   모듈: 입력/로드 · 호모그래피(보정) · 검출(선/레인/spot)
+        · 오버레이/드래그 · Rf 계산 · 내보내기
+   ════════════════════════════════════════════════════════════ */
+
+const $ = s => document.querySelector(s);
+const cv = $('#cv'), ctx = cv.getContext('2d');
+const SPOT_COLORS = ['#1a6bb5','#1D9E75','#BA7517','#c0392b','#7b3fb5','#0e8a8a','#d2691e','#b5179e'];
+
+/* ── 전역 상태 ───────────────────────────────────────────── */
+const S = {
+  step: 1,
+  work: null,                 // {canvas,w,h} 작업용(다운스케일) 원본
+  corners: null,              // [{x,y}*4]  TL,TR,BR,BL (work 좌표)
+  rect: null,                 // {canvas,w,h} 보정된 직사각형 이미지
+  gray: null,                 // {data,w,h}   rect의 grayscale (검출용)
+  baseline: null,             // {lx,ly,rx,ry} rect 좌표 (양 끝점 조정 가능한 선분)
+  front: null,                // {lx,ly,rx,ry}
+  lanes: [],                  // 레인 중심 x (rect 좌표)
+  laneLabels: [],             // 레인 라벨 문자열
+  spots: [],                  // {x, y, lane}  rect 좌표 (자유 위치)
+  sel: null,                  // 선택된 spot index
+  selLane: null,              // 선택된 레인 index (모바일 삭제용)
+  sens: 1.0,                  // spot 검출 감도 k (작을수록 민감)
+};
+let view = null;              // 현재 캔버스에 그려진 이미지 {canvas,w,h}
+
+/* ── 토스트 ──────────────────────────────────────────────── */
+let toastT;
+function toast(msg){
+  const t = $('#toast'); t.textContent = msg; t.classList.add('show');
+  clearTimeout(toastT); toastT = setTimeout(()=>t.classList.remove('show'), 2200);
+}
+
+/* ── 되돌리기(Undo) 스택 ──────────────────────────────────
+   편집 가능한 기하 상태만 스냅샷. 변경 "직전"에 snapshot() 호출 → Ctrl+Z 로 복원. */
+const undoStack = [];
+function snapshot(){
+  undoStack.push(JSON.stringify({
+    corners:S.corners, baseline:S.baseline, front:S.front,
+    lanes:S.lanes, laneLabels:S.laneLabels, spots:S.spots, sens:S.sens
+  }));
+  if(undoStack.length>60) undoStack.shift();
+}
+function undo(){
+  if(!undoStack.length){ toast('되돌릴 작업이 없습니다'); return; }
+  const s=JSON.parse(undoStack.pop());
+  S.corners=s.corners; S.baseline=s.baseline; S.front=s.front;
+  S.lanes=s.lanes; S.laneLabels=s.laneLabels; S.spots=s.spots; S.sens=s.sens;
+  S.sel=null; S.selLane=null; refreshPanel(); render(); toast('되돌렸습니다');
+}
+
+/* ════════════ ① 이미지 입력/로드 ════════════ */
+function loadFromFile(file){
+  if(!file || !file.type.startsWith('image/')){ toast('이미지 파일이 아닙니다'); return; }
+  const url = URL.createObjectURL(file);
+  const img = new Image();
+  img.onload = ()=>{ URL.revokeObjectURL(url); setupImage(img); };
+  img.onerror = ()=>{ URL.revokeObjectURL(url); toast('이미지를 열 수 없습니다'); };
+  img.src = url;
+}
+function setupImage(img){
+  // 작업용 다운스케일 (긴 변 ≤ 1200)
+  const MAX = 1200, scale = Math.min(1, MAX/Math.max(img.width,img.height));
+  const w = Math.round(img.width*scale), h = Math.round(img.height*scale);
+  const c = document.createElement('canvas'); c.width=w; c.height=h;
+  c.getContext('2d').drawImage(img,0,0,w,h);
+  S.work = {canvas:c, w, h};
+  S.corners = autoCorners(S.work);
+  S.rect = null; S.gray = null; S.baseline = null; S.front = null;
+  S.spots = []; S.lanes = []; S.laneLabels = []; S.sel = null; S.selLane = null;
+  $('#btnAuto').disabled = false;
+  goStep(2);
+}
+
+/* 자동 플레이트 코너 추정 (색 무관).
+   ① UV 형광 녹색 플레이트 우선 시도 → ② 일반: 테두리 배경색과 다른 최대 영역
+   → ③ 6% inset 폴백. 회전된 사각형도 4 극점으로 코너 산출. 항상 사용자가 드래그로 확정. */
+function maskComponent(d,w,h,test){
+  // test(r,g,b)→true 픽셀의 최대 연결요소와 그 4 극점(TL,TR,BR,BL) 반환
+  const mask=new Uint8Array(w*h);
+  for(let i=0,j=0;i<d.length;i+=4,j++){ if(test(d[i],d[i+1],d[i+2])) mask[j]=1; }
+  const seen=new Uint8Array(w*h), stack=[]; let best=null;
+  for(let s=0;s<mask.length;s++){
+    if(!mask[s]||seen[s]) continue;
+    let area=0, mnSum=1e9,mxSum=-1e9,mxDif=-1e9,mnDif=1e9, tl,tr,br,bl;
+    stack.length=0; stack.push(s); seen[s]=1;
+    while(stack.length){
+      const p=stack.pop(), x=p%w, y=(p/w)|0; area++;
+      const sum=x+y, dif=x-y;
+      if(sum<mnSum){mnSum=sum; tl=[x,y];} if(sum>mxSum){mxSum=sum; br=[x,y];}
+      if(dif>mxDif){mxDif=dif; tr=[x,y];} if(dif<mnDif){mnDif=dif; bl=[x,y];}
+      if(x>0){const q=p-1; if(mask[q]&&!seen[q]){seen[q]=1;stack.push(q);}}
+      if(x<w-1){const q=p+1; if(mask[q]&&!seen[q]){seen[q]=1;stack.push(q);}}
+      if(y>0){const q=p-w; if(mask[q]&&!seen[q]){seen[q]=1;stack.push(q);}}
+      if(y<h-1){const q=p+w; if(mask[q]&&!seen[q]){seen[q]=1;stack.push(q);}}
+    }
+    if(!best||area>best.area) best={area, corners:[tl,tr,br,bl]};
+  }
+  return best;
+}
+function borderMedian(d,w,h){     // 이미지 바깥 테두리 띠의 채널별 중앙값 = 배경색
+  const rs=[],gs=[],bs=[], m=Math.max(2,Math.round(Math.min(w,h)*0.035));
+  const sx=Math.max(1,Math.round(w/220)), sy=Math.max(1,Math.round(h/220));
+  const add=(x,y)=>{ const i=(y*w+x)*4; rs.push(d[i]);gs.push(d[i+1]);bs.push(d[i+2]); };
+  for(let y=0;y<h;y+=sy){ for(let x=0;x<m;x+=sx) add(x,y); for(let x=w-m;x<w;x+=sx) add(x,y); }
+  for(let x=0;x<w;x+=sx){ for(let y=0;y<m;y+=sy) add(x,y); for(let y=h-m;y<h;y+=sy) add(x,y); }
+  const med=a=>{ a.sort((p,q)=>p-q); return a[a.length>>1]||0; };
+  return [med(rs),med(gs),med(bs)];
+}
+function autoCorners(work){
+  const {canvas:c,w,h} = work;
+  const d = c.getContext('2d').getImageData(0,0,w,h).data;
+  const toPts=comp=>comp.corners.map(p=>({x:p[0],y:p[1]}));
+  // ① UV 형광 녹색 플레이트
+  const green=maskComponent(d,w,h,(r,g,b)=> g>95 && g-r>26 && g-b>26);
+  if(green && green.area > w*h*0.05) return toPts(green);
+  // ② 일반: 테두리 배경과 (a)색이 다르거나 (b)더 밝은(흰 실리카) 최대 영역.
+  //    임계를 높→낮으로 내리며 "플레이트로 적당한 크기(12~88%)"인 첫 영역 채택.
+  const bg=borderMedian(d,w,h);
+  const bLum=0.299*bg[0]+0.587*bg[1]+0.114*bg[2];
+  const tests=[];
+  for(const TH of [95,75,58,46,36]) tests.push((r,g,b)=>(Math.abs(r-bg[0])+Math.abs(g-bg[1])+Math.abs(b-bg[2]))>TH); // 색차
+  for(const M of [55,42,30,22])     tests.push((r,g,b)=>(0.299*r+0.587*g+0.114*b)-bLum>M);                          // 밝기 우위
+  for(const test of tests){
+    const comp=maskComponent(d,w,h,test); if(!comp) continue;
+    const frac=comp.area/(w*h);
+    if(frac>0.12 && frac<0.88) return toPts(comp);
+  }
+  // ③ 폴백: 프레임에 붙지 않도록 8% inset (검출 실패 시 사용자가 드래그로 맞춤)
+  return [{x:w*0.08,y:h*0.08},{x:w*0.92,y:h*0.08},{x:w*0.92,y:h*0.92},{x:w*0.08,y:h*0.92}];
+}
+
+/* ════════════ ② 호모그래피 원근 보정 ════════════ */
+// 8×8 선형계 가우스 소거
+function solve8(A,b){
+  const n=8, M=A.map((r,i)=>[...r,b[i]]);
+  for(let c=0;c<n;c++){
+    let piv=c; for(let r=c+1;r<n;r++) if(Math.abs(M[r][c])>Math.abs(M[piv][c])) piv=r;
+    [M[c],M[piv]]=[M[piv],M[c]];
+    const pv=M[c][c]||1e-9;
+    for(let k=c;k<=n;k++) M[c][k]/=pv;
+    for(let r=0;r<n;r++){ if(r===c) continue; const f=M[r][c];
+      for(let k=c;k<=n;k++) M[r][k]-=f*M[c][k]; }
+  }
+  return M.map(r=>r[n]);
+}
+// dest(x,y) → src(u,v) 호모그래피. dst[]=목적지 직사각형 코너, src[]=사용자 코너
+function homography(dst,src){
+  const A=[],b=[];
+  for(let i=0;i<4;i++){
+    const {x,y}=dst[i], {x:u,y:v}=src[i];
+    A.push([x,y,1,0,0,0,-x*u,-y*u]); b.push(u);
+    A.push([0,0,0,x,y,1,-x*v,-y*v]); b.push(v);
+  }
+  const h=solve8(A,b);
+  return [h[0],h[1],h[2],h[3],h[4],h[5],h[6],h[7],1];
+}
+function buildRect(){
+  const C=S.corners, dist=(a,b)=>Math.hypot(a.x-b.x,a.y-b.y);
+  const top=dist(C[0],C[1]), bot=dist(C[3],C[2]), left=dist(C[0],C[3]), right=dist(C[1],C[2]);
+  let W=Math.round((top+bot)/2), H=Math.round((left+right)/2);
+  const cap=1000, sc=Math.min(1,cap/Math.max(W,H)); W=Math.max(40,Math.round(W*sc)); H=Math.max(40,Math.round(H*sc));
+  const dst=[{x:0,y:0},{x:W,y:0},{x:W,y:H},{x:0,y:H}];
+  const h=homography(dst,S.corners);
+  const sCtx=S.work.canvas.getContext('2d');
+  const src=sCtx.getImageData(0,0,S.work.w,S.work.h).data, sw=S.work.w, sh=S.work.h;
+  const out=ctx.createImageData(W,H), o=out.data;
+  const sample=(u,v,di)=>{
+    if(u<0||v<0||u>=sw-1||v>=sh-1){ o[di]=o[di+1]=o[di+2]=255; o[di+3]=255; return; }
+    const x0=Math.floor(u),y0=Math.floor(v),fx=u-x0,fy=v-y0;
+    const i00=(y0*sw+x0)*4,i10=i00+4,i01=i00+sw*4,i11=i01+4;
+    for(let k=0;k<3;k++){
+      const a=src[i00+k]*(1-fx)+src[i10+k]*fx, b2=src[i01+k]*(1-fx)+src[i11+k]*fx;
+      o[di+k]=a*(1-fy)+b2*fy;
+    }
+    o[di+3]=255;
+  };
+  for(let y=0;y<H;y++) for(let x=0;x<W;x++){
+    const den=h[6]*x+h[7]*y+1;
+    const u=(h[0]*x+h[1]*y+h[2])/den, v=(h[3]*x+h[4]*y+h[5])/den;
+    sample(u,v,(y*W+x)*4);
+  }
+  const c=document.createElement('canvas'); c.width=W; c.height=H;
+  c.getContext('2d').putImageData(out,0,0);
+  S.rect={canvas:c,w:W,h:H};
+  buildGray();
+  // 기준선 기본값 (수평 선분; 이후 양 끝점을 드래그해 기울일 수 있음)
+  S.front    = {lx:0, ly:Math.round(H*0.10), rx:W, ry:Math.round(H*0.10)};
+  S.baseline = {lx:0, ly:Math.round(H*0.90), rx:W, ry:Math.round(H*0.90)};
+}
+/* 선분 y 보간 / 평행 설정 */
+function yAt(line,x){ const dx=line.rx-line.lx; return dx ? line.ly+(line.ry-line.ly)*(x-line.lx)/dx : line.ly; }
+function setLineY(line,y){ line.ly=y; line.ry=y; }
+function buildGray(){
+  const {canvas:c,w,h}=S.rect;
+  const d=c.getContext('2d').getImageData(0,0,w,h).data;
+  const g=new Float32Array(w*h);
+  for(let i=0,j=0;i<d.length;i+=4,j++) g[j]=0.299*d[i]+0.587*d[i+1]+0.114*d[i+2];
+  S.gray={data:g,w,h};
+}
+
+/* ════════════ ③ 기준선 자동 제안 ════════════ */
+function rowMean(y){ const {data,w}=S.gray; let s=0; for(let x=0;x<w;x++) s+=data[y*w+x]; return s/w; }
+function autoLines(){
+  const {h}=S.gray;
+  const rm=new Float32Array(h); for(let y=0;y<h;y++) rm[y]=rowMean(y);
+  // front: 상단부 밝기 급변(용매선). 범위를 [4%,28%]로 제한 → 항상 넓은 밴드 보장.
+  let fy=Math.round(h*0.1), fmax=-1;
+  for(let y=Math.round(h*0.04);y<Math.round(h*0.28);y++){ const g=Math.abs(rm[y+2]-rm[y-2]); if(g>fmax){fmax=g; fy=y;} }
+  // baseline: 하단부에서 가장 어두운 행(원점). 범위를 [72%,96%]로 제한.
+  let by=Math.round(h*0.9), bmin=1e9;
+  for(let y=Math.round(h*0.72);y<Math.round(h*0.96);y++){ if(rm[y]<bmin){bmin=rm[y]; by=y;} }
+  setLineY(S.front,fy); setLineY(S.baseline,by);                 // 수평으로 초기화(사용자가 끝점 드래그로 기울임)
+}
+
+/* ════════════ ④ spot 검출 — 배경색 대비 2D blob ════════════
+   luminance·레인밴드에 의존하지 않고, 플레이트 배경색과의 "색 차이"를
+   blob(연결요소)으로 잡는다 → 녹색 위 파란/보라/진초록 spot도 검출. */
+function bandY(){                       // 전개영역(front~baseline) y 범위
+  const top=Math.min(S.front.ly,S.front.ry), bot=Math.max(S.baseline.ly,S.baseline.ry);
+  return { y0:Math.max(0,Math.round(top)+2), y1:Math.min(S.rect.h,Math.round(bot)-2) };
+}
+function estimatePlateBg(data,w,y0,y1){   // 채널별 중앙값 = 플레이트 배경색(spot은 소수 면적)
+  const rs=[],gs=[],bs=[], step=Math.max(1,Math.round((y1-y0)/120));
+  for(let y=y0;y<y1;y+=step) for(let x=0;x<w;x+=Math.max(1,Math.round(w/120))){
+    const i=(y*w+x)*4; rs.push(data[i]); gs.push(data[i+1]); bs.push(data[i+2]);
+  }
+  const med=a=>{ a.sort((p,q)=>p-q); return a[a.length>>1]||0; };
+  return [med(rs),med(gs),med(bs)];
+}
+function blurField(f,w,h,r){              // 분리형 박스 블러
+  if(r<1) return f.slice();
+  const t=new Float32Array(w*h), o=new Float32Array(w*h);
+  for(let y=0;y<h;y++) for(let x=0;x<w;x++){ let s=0,c=0; for(let k=-r;k<=r;k++){ const xx=x+k; if(xx>=0&&xx<w){s+=f[y*w+xx];c++;} } t[y*w+x]=s/c; }
+  for(let y=0;y<h;y++) for(let x=0;x<w;x++){ let s=0,c=0; for(let k=-r;k<=r;k++){ const yy=y+k; if(yy>=0&&yy<h){s+=t[yy*w+x];c++;} } o[y*w+x]=s/c; }
+  return o;
+}
+function connectedBlobs(f,w,h,thr,minArea,maxArea){   // 임계 초과 픽셀의 4-이웃 연결요소
+  const seen=new Uint8Array(w*h), blobs=[], stack=[];
+  for(let i=0;i<f.length;i++){
+    if(seen[i]||f[i]<thr) continue;
+    let sx=0,sy=0,area=0; stack.length=0; stack.push(i); seen[i]=1;
+    while(stack.length){
+      const p=stack.pop(), x=p%w, y=(p/w)|0; sx+=x; sy+=y; area++;
+      if(x>0){const q=p-1; if(!seen[q]&&f[q]>=thr){seen[q]=1;stack.push(q);}}
+      if(x<w-1){const q=p+1; if(!seen[q]&&f[q]>=thr){seen[q]=1;stack.push(q);}}
+      if(y>0){const q=p-w; if(!seen[q]&&f[q]>=thr){seen[q]=1;stack.push(q);}}
+      if(y<h-1){const q=p+w; if(!seen[q]&&f[q]>=thr){seen[q]=1;stack.push(q);}}
+    }
+    if(area>=minArea && area<=maxArea) blobs.push({cx:sx/area, cy:sy/area, area});
+  }
+  return blobs;
+}
+function detectSpots(){
+  const {canvas,w}=S.rect;
+  const data=canvas.getContext('2d').getImageData(0,0,w,S.rect.h).data;
+  const {y0,y1}=bandY(); const bh=y1-y0;
+  if(bh<6){ S.spots=[]; S.sel=null; clusterLanes(); return; }
+  const bg=estimatePlateBg(data,w,y0,y1);
+  const diff=new Float32Array(w*bh);
+  for(let y=y0;y<y1;y++) for(let x=0;x<w;x++){
+    const i=(y*w+x)*4;
+    diff[(y-y0)*w+x]=Math.abs(data[i]-bg[0])+Math.abs(data[i+1]-bg[1])+Math.abs(data[i+2]-bg[2]);
+  }
+  const bl=blurField(diff,w,bh,Math.max(1,Math.round(Math.min(w,bh)/110)));
+  let mean=0; for(const v of bl) mean+=v; mean/=bl.length;
+  let varc=0; for(const v of bl) varc+=(v-mean)*(v-mean); const std=Math.sqrt(varc/bl.length);
+  const thr=Math.max(12, mean + S.sens*std);            // sens 작을수록 임계 낮음(=민감)
+  const minArea=Math.max(8, Math.round(w*bh*0.0005));
+  const maxArea=Math.round(w*bh*0.22);
+  const blobs=connectedBlobs(bl,w,bh,thr,minArea,maxArea);
+  S.spots=blobs.map(b=>({x:Math.round(b.cx), y:Math.round(b.cy)+y0, lane:0}));
+  clusterLanes(); assignLanes(); S.sel=null; S.selLane=null;
+}
+/* 레인 = spot x 클러스터 (없으면 균등 분할 fallback) */
+function defaultLanes(n){ const w=S.rect?.w||S.gray?.w||100; return Array.from({length:n},(_,i)=>Math.round(w*(i+1)/(n+1))); }
+function clusterLanes(){
+  if(!S.spots.length){ if(!S.lanes.length) S.lanes=defaultLanes(3); S.laneLabels=S.lanes.map((_,i)=>S.laneLabels[i]||''); return; }
+  const xs=S.spots.map(s=>s.x).sort((a,b)=>a-b);
+  const gap=Math.max(18, Math.round(S.rect.w*0.06));
+  const groups=[]; let cur=[xs[0]];
+  for(let i=1;i<xs.length;i++){ if(xs[i]-xs[i-1]<=gap) cur.push(xs[i]); else { groups.push(cur); cur=[xs[i]]; } }
+  groups.push(cur);
+  S.lanes=groups.map(g=>Math.round(g.reduce((a,b)=>a+b,0)/g.length));
+  S.laneLabels=S.lanes.map((_,i)=>S.laneLabels[i]||'');
+}
+function assignLanes(){
+  S.spots.forEach(sp=>{ let nl=0,nd=1e9; S.lanes.forEach((cx,i)=>{const d=Math.abs(cx-sp.x); if(d<nd){nd=d;nl=i;}}); sp.lane=nl; });
+}
+/* 특정 레인 삭제 — 소속 spot 제거 + 뒤 레인 인덱스 보정 */
+function deleteLane(li){
+  S.lanes.splice(li,1); S.laneLabels.splice(li,1);
+  S.spots = S.spots.filter(s=>s.lane!==li).map(s=>{ if(s.lane>li) s.lane--; return s; });
+  S.sel=null; S.selLane=null;
+}
+
+/* ════════════ Rf 계산 (기울어진 선분 → spot의 x에서 보간) ════════════ */
+function rfOf(spot){
+  const by=yAt(S.baseline,spot.x), fy=yAt(S.front,spot.x), span=by-fy;
+  if(!span) return 0;
+  return (by-spot.y)/span;
+}
+
+/* ════════════ 렌더링 ════════════ */
+function setView(v){ view=v; cv.width=v.w; cv.height=v.h; render(); }
+function uiScale(){ return { lw:Math.max(2,view.w/350), r:Math.max(9,view.w/55), font:Math.max(13,view.w/42) }; }
+/* 모바일/터치 UI 여부 — 이때만 ✕ 삭제 배지 표시 (PC는 우클릭·Delete 사용) */
+function touchUI(){ return window.matchMedia('(max-width:680px)').matches || window.matchMedia('(pointer:coarse)').matches; }
+/* 선택된 spot 옆 삭제(✕) 배지 위치 — 화면 밖이면 반대편으로 */
+function spotBadge(sp,u){
+  const off=u.r*1.8;
+  const x=(sp.x+off < view.w-2) ? sp.x+off : sp.x-off;
+  const y=(sp.y-off > 2)        ? sp.y-off : sp.y+off;
+  return { x, y, r:Math.max(11,u.r*1.05) };
+}
+/* 선택된 레인 핸들 옆 삭제(✕) 배지 위치 */
+function laneBadge(i,u){
+  const cx=S.lanes[i], hy=yAt(S.baseline,cx)+u.r*1.6, off=u.r*1.8;
+  return { x:(cx+off < view.w-2)?cx+off:cx-off, y:hy, r:Math.max(10,u.r*0.95) };
+}
+
+function render(){
+  if(!view) return;
+  ctx.clearRect(0,0,cv.width,cv.height);
+  ctx.drawImage(view.canvas,0,0);
+  const u=uiScale();
+  if(S.step===2) drawCorners(u);
+  else if(S.step>=3) drawAnalysis(u);
+}
+function drawCorners(u){
+  const C=S.corners;
+  ctx.lineWidth=u.lw; ctx.strokeStyle='rgba(26,107,181,.95)';
+  ctx.fillStyle='rgba(26,107,181,.12)';
+  ctx.beginPath(); ctx.moveTo(C[0].x,C[0].y);
+  for(let i=1;i<4;i++) ctx.lineTo(C[i].x,C[i].y);
+  ctx.closePath(); ctx.fill(); ctx.stroke();
+  const lbl=['TL','TR','BR','BL'];
+  C.forEach((p,i)=>{
+    ctx.beginPath(); ctx.arc(p.x,p.y,u.r,0,7); ctx.fillStyle='#fff'; ctx.fill();
+    ctx.lineWidth=u.lw; ctx.strokeStyle='#1a6bb5'; ctx.stroke();
+    ctx.fillStyle='#1a6bb5'; ctx.beginPath(); ctx.arc(p.x,p.y,u.r*0.42,0,7); ctx.fill();
+    ctx.fillStyle='#1a6bb5'; ctx.font=`600 ${u.font*0.8}px var(--fm,monospace)`;
+    ctx.fillText(lbl[i], p.x+u.r+3, p.y-u.r*0.4);
+  });
+}
+function drawSeg(line,color,label,u){
+  ctx.lineWidth=u.lw; ctx.strokeStyle=color; ctx.setLineDash([u.r*0.9,u.r*0.6]);
+  ctx.beginPath(); ctx.moveTo(line.lx,line.ly); ctx.lineTo(line.rx,line.ry); ctx.stroke(); ctx.setLineDash([]);
+  ctx.fillStyle=color; ctx.font=`600 ${u.font}px var(--f,sans-serif)`;
+  const tw=ctx.measureText(label).width;
+  ctx.fillRect(4,line.ly-u.font-6,tw+12,u.font+8);
+  ctx.fillStyle='#fff'; ctx.fillText(label,10,line.ly-7);
+  // 양 끝점 핸들
+  [[line.lx,line.ly],[line.rx,line.ry]].forEach(([hx,hy])=>{
+    ctx.beginPath(); ctx.arc(hx,hy,u.r,0,7); ctx.fillStyle='#fff'; ctx.fill();
+    ctx.lineWidth=u.lw; ctx.strokeStyle=color; ctx.stroke();
+    ctx.fillStyle=color; ctx.beginPath(); ctx.arc(hx,hy,u.r*0.42,0,7); ctx.fill();
+  });
+}
+function drawAnalysis(u){
+  // 기준선 (양 끝점 조정 가능한 선분)
+  drawSeg(S.front,'#BA7517','용매 front',u);
+  drawSeg(S.baseline,'#1a6bb5','baseline (원점)',u);
+  // 레인 (step4에서만 표시)
+  if(S.step===4){
+    ctx.lineWidth=u.lw*0.6; ctx.strokeStyle='rgba(120,130,150,.5)'; ctx.setLineDash([3,5]);
+    S.lanes.forEach(cx=>{ ctx.beginPath(); ctx.moveTo(cx,yAt(S.front,cx)); ctx.lineTo(cx,yAt(S.baseline,cx)); ctx.stroke(); });
+    ctx.setLineDash([]);
+    // 레인 핸들 (baseline 아래)
+    S.lanes.forEach((cx,i)=>{
+      const by=yAt(S.baseline,cx), selL=(i===S.selLane);
+      ctx.beginPath(); ctx.arc(cx,by+u.r*1.6,u.r*0.8,0,7);
+      ctx.fillStyle='#fff'; ctx.fill(); ctx.lineWidth=u.lw*(selL?1.6:1); ctx.strokeStyle=selL?'#1a6bb5':'#888'; ctx.stroke();
+      ctx.fillStyle=selL?'#1a6bb5':'#555'; ctx.font=`600 ${u.font*0.75}px var(--fm,monospace)`;
+      ctx.textAlign='center'; ctx.fillText(String(i+1),cx,by+u.r*1.95); ctx.textAlign='left';
+      // 선택된 레인: 삭제(✕) 배지 — 모바일(터치)에서만
+      if(selL && touchUI()){
+        const b=laneBadge(i,u);
+        ctx.beginPath(); ctx.arc(b.x,b.y,b.r,0,7); ctx.fillStyle='#c0392b'; ctx.fill();
+        ctx.lineWidth=u.lw; ctx.strokeStyle='#fff'; ctx.stroke();
+        ctx.lineWidth=Math.max(2.5,u.lw*1.1); ctx.strokeStyle='#fff'; const k=b.r*0.42;
+        ctx.beginPath(); ctx.moveTo(b.x-k,b.y-k); ctx.lineTo(b.x+k,b.y+k);
+        ctx.moveTo(b.x+k,b.y-k); ctx.lineTo(b.x-k,b.y+k); ctx.stroke();
+      }
+    });
+  }
+  // spots (자유 위치 sp.x, sp.y)
+  S.spots.forEach((sp,idx)=>{
+    const cx=sp.x;
+    const col=SPOT_COLORS[sp.lane%SPOT_COLORS.length];
+    const seld=(idx===S.sel);
+    ctx.beginPath(); ctx.arc(cx,sp.y,u.r*(seld?1.15:0.95),0,7);
+    ctx.fillStyle=col+'cc'; ctx.fill();
+    ctx.lineWidth=u.lw*(seld?1.6:1); ctx.strokeStyle=seld?'#fff':'#ffffffaa'; ctx.stroke();
+    if(seld){ ctx.lineWidth=u.lw; ctx.strokeStyle=col; ctx.beginPath(); ctx.arc(cx,sp.y,u.r*1.5,0,7); ctx.stroke(); }
+    // Rf 라벨
+    const rf=rfOf(sp).toFixed(2);
+    ctx.font=`600 ${u.font*0.82}px var(--fm,monospace)`;
+    const tw=ctx.measureText(rf).width;
+    ctx.fillStyle=col; ctx.fillRect(cx+u.r+2,sp.y-u.font*0.6,tw+8,u.font);
+    ctx.fillStyle='#fff'; ctx.fillText(rf,cx+u.r+6,sp.y+u.font*0.28);
+    // 선택된 spot: 삭제(✕) 배지 — 모바일(터치)에서만 표시
+    if(seld && touchUI()){
+      const b=spotBadge(sp,u);
+      ctx.beginPath(); ctx.arc(b.x,b.y,b.r,0,7); ctx.fillStyle='#c0392b'; ctx.fill();
+      ctx.lineWidth=u.lw; ctx.strokeStyle='#fff'; ctx.stroke();
+      ctx.lineWidth=Math.max(2.5,u.lw*1.1); ctx.strokeStyle='#fff'; const k=b.r*0.42;
+      ctx.beginPath(); ctx.moveTo(b.x-k,b.y-k); ctx.lineTo(b.x+k,b.y+k);
+      ctx.moveTo(b.x+k,b.y-k); ctx.lineTo(b.x-k,b.y+k); ctx.stroke();
+    }
+  });
+}
+
+/* ════════════ 포인터 상호작용 ════════════ */
+function toImg(e){
+  const r=cv.getBoundingClientRect();
+  return { x:(e.clientX-r.left)*(cv.width/r.width), y:(e.clientY-r.top)*(cv.height/r.height) };
+}
+let drag=null; // {type, idx}
+cv.addEventListener('pointerdown', e=>{
+  if(!view) return;
+  const p=toImg(e), u=uiScale(), hit=u.r*1.8;
+  // 선분의 어느 부분을 잡았는지: 왼끝/오른끝(기울기) vs 가운데(평행 이동)
+  const lineGrab=(line)=>{
+    if(Math.abs(p.y-yAt(line,p.x))>=hit) return null;
+    if(p.x < view.w*0.22) return 'l';
+    if(p.x > view.w*0.78) return 'r';
+    return 'mid';
+  };
+  if(S.step===2){
+    for(let i=0;i<4;i++) if(Math.hypot(S.corners[i].x-p.x,S.corners[i].y-p.y)<hit){ snapshot(); drag={type:'corner',idx:i}; cv.setPointerCapture(e.pointerId); return; }
+  } else if(S.step===3 || S.step===4){
+    if(S.step===4){
+      // 모바일: 선택된 spot/레인의 ✕ 배지 탭 → 삭제
+      if(touchUI()){
+        if(S.sel!=null && S.spots[S.sel]){
+          const b=spotBadge(S.spots[S.sel],u);
+          if(Math.hypot(b.x-p.x,b.y-p.y)<b.r*1.5){ snapshot(); S.spots.splice(S.sel,1); S.sel=null; render(); refreshPanel(); toast('spot 삭제'); return; }
+        }
+        if(S.selLane!=null && S.lanes[S.selLane]!=null){
+          const b=laneBadge(S.selLane,u);
+          if(Math.hypot(b.x-p.x,b.y-p.y)<b.r*1.5){ snapshot(); deleteLane(S.selLane); S.selLane=null; render(); refreshPanel(); toast('레인 삭제'); return; }
+        }
+      }
+      // spot 우선 (자유 위치) — 탭하면 선택
+      for(let i=0;i<S.spots.length;i++){ const sp=S.spots[i];
+        if(Math.hypot(sp.x-p.x,sp.y-p.y)<hit){ snapshot(); S.sel=i; S.selLane=null; drag={type:'spot',idx:i}; render(); refreshPanel(); return; } }
+      // 레인 핸들 (baseline 아래) — 탭하면 선택, 드래그하면 이동
+      for(let i=0;i<S.lanes.length;i++){ const cx=S.lanes[i];
+        if(Math.abs(cx-p.x)<hit && p.y>yAt(S.baseline,cx)){ snapshot(); S.selLane=i; S.sel=null; drag={type:'lane',idx:i}; render(); return; } }
+    }
+    // 기준선: 가운데=평행 이동, 양끝=기울기. (mid 모드는 양 끝 동시 이동)
+    let g;
+    if((g=lineGrab(S.baseline))){ snapshot(); drag={type:'baseline', mode:g, sy:p.y, ily:S.baseline.ly, iry:S.baseline.ry}; return; }
+    if((g=lineGrab(S.front))){ snapshot(); drag={type:'front', mode:g, sy:p.y, ily:S.front.ly, iry:S.front.ry}; return; }
+    // 빈 곳 클릭 → 그 위치에 spot 추가(가장 가까운 레인 배정)
+    if(S.step===4 && p.y>yAt(S.front,p.x) && p.y<yAt(S.baseline,p.x)){
+      snapshot();
+      if(!S.lanes.length){ S.lanes=[Math.round(p.x)]; S.laneLabels=['']; }
+      let nl=0,nd=1e9; S.lanes.forEach((cx,i)=>{const d=Math.abs(cx-p.x); if(d<nd){nd=d;nl=i;}});
+      S.spots.push({x:Math.round(p.x), y:Math.round(p.y), lane:nl}); S.sel=S.spots.length-1; S.selLane=null;
+      render(); refreshPanel(); toast('spot 추가됨');
+    }
+  }
+});
+cv.addEventListener('pointermove', e=>{
+  if(!drag||!view) return;
+  const p=toImg(e);
+  const cl=(v,a,b)=>Math.max(a,Math.min(b,v));
+  const moveLine=(line)=>{
+    const d=p.y-drag.sy;
+    if(drag.mode==='l') line.ly=Math.round(cl(drag.ily+d,0,view.h));
+    else if(drag.mode==='r') line.ry=Math.round(cl(drag.iry+d,0,view.h));
+    else { line.ly=Math.round(cl(drag.ily+d,0,view.h)); line.ry=Math.round(cl(drag.iry+d,0,view.h)); }
+  };
+  if(drag.type==='corner'){ S.corners[drag.idx]={x:cl(p.x,0,view.w),y:cl(p.y,0,view.h)}; }
+  else if(drag.type==='baseline'){ moveLine(S.baseline); }
+  else if(drag.type==='front'){ moveLine(S.front); }
+  else if(drag.type==='lane'){ S.lanes[drag.idx]=Math.round(cl(p.x,0,view.w)); }
+  else if(drag.type==='spot'){ const sp=S.spots[drag.idx];
+      sp.x=Math.round(cl(p.x,0,view.w)); sp.y=Math.round(cl(p.y,0,view.h));
+      let nl=sp.lane,nd=1e9; S.lanes.forEach((cx,i)=>{const d=Math.abs(cx-p.x); if(d<nd){nd=d;nl=i;}});
+      sp.lane=nl; }
+  render();
+});
+cv.addEventListener('pointerup', ()=>{ if(drag&&(drag.type==='spot'||drag.type==='lane')) refreshPanel(); drag=null; });
+// 우클릭 = 개별 spot 삭제 (한 레인에 여러 개 있어도 가장 가까운 것만 제거)
+cv.addEventListener('contextmenu', e=>{
+  if(S.step!==4||!view){ return; }
+  e.preventDefault();
+  const p=toImg(e), u=uiScale(), hit=u.r*1.9;
+  // ① baseline 아래의 레인 핸들 우클릭 → 그 레인 삭제(소속 spot 포함)
+  for(let i=0;i<S.lanes.length;i++){ const cx=S.lanes[i];
+    if(Math.abs(cx-p.x)<hit*1.4 && p.y>yAt(S.baseline,cx)){
+      snapshot(); deleteLane(i); render(); refreshPanel(); toast(`레인 ${i+1} 삭제`); return; }
+  }
+  // ② 스팟 우클릭 → 가장 가까운 스팟 하나 삭제
+  let bi=-1,bd=hit;
+  S.spots.forEach((sp,i)=>{ const d=Math.hypot(sp.x-p.x,sp.y-p.y); if(d<bd){bd=d;bi=i;} });
+  if(bi>=0){ snapshot(); S.spots.splice(bi,1); S.sel=null; render(); refreshPanel(); toast('spot 삭제'); }
+});
+window.addEventListener('keydown', e=>{
+  // Ctrl+Z / Cmd+Z = 되돌리기
+  if((e.ctrlKey||e.metaKey) && (e.key==='z'||e.key==='Z')){ e.preventDefault(); undo(); return; }
+  if(S.step===4 && S.sel!=null && (e.key==='Delete'||e.key==='Backspace')){
+    snapshot(); S.spots.splice(S.sel,1); S.sel=null; render(); refreshPanel();
+  }
+});
+
+/* ════════════ 단계 전환 & 패널 ════════════ */
+function goStep(n){
+  S.step=n;
+  // 뷰 이미지 결정
+  if(n===1){ $('#drop').style.display='block'; $('#cvWrap').style.display='none'; }
+  else { $('#drop').style.display='none'; $('#cvWrap').style.display='block';
+    setView(n===2 ? S.work : S.rect); }
+  // 스텝퍼
+  document.querySelectorAll('.step').forEach(el=>{
+    const s=+el.dataset.step; el.classList.toggle('active',s===n);
+    el.classList.toggle('done', s<n && S.work);
+    el.classList.toggle('clickable', !!S.work && (s<=Math.max(n, S.rect?5:2)));
+  });
+  $('#btnPrev').style.visibility = n<=1?'hidden':'visible';
+  $('#btnNext').textContent = n>=5 ? '완료' : '다음 ›';
+  $('#btnNext').disabled = n>=5;
+  refreshPanel();
+  render();
+}
+function refreshPanel(){ $('#panelBody').innerHTML = PANEL[S.step]?.() || ''; bindPanel(); }
+
+const PANEL = {
+  1: ()=>`
+    <div class="ptitle"><span class="ico">📂</span> 이미지 불러오기</div>
+    <div class="phelp">왼쪽 영역을 클릭하거나 사진을 드래그&드롭하세요.
+      클립보드에 캡처한 이미지는 <b>Ctrl+V</b>로 바로 붙여넣을 수 있습니다.</div>
+    <div class="psec"><h4>입력 방식</h4>
+      <div class="legend">
+        <div class="li">📎 파일 선택 / 드래그&드롭</div>
+        <div class="li">📋 클립보드 붙여넣기 (Ctrl+V)</div>
+        <div class="li">🖼️ 원본 사진 · 잘라낸 이미지 모두 가능</div>
+      </div></div>
+    <div class="phelp muted">이미지를 올리면 다음 단계(플레이트 보정)로 넘어갑니다.</div>`,
+
+  2: ()=>`
+    <div class="ptitle"><span class="ico">⬡</span> 플레이트 보정</div>
+    <div class="phelp">파란 점 <b>4개(TL·TR·BR·BL)</b>를 TLC 플레이트의 네 모서리에 정확히 맞춰 드래그하세요.
+      기울어진 사진도 직사각형으로 펴집니다.</div>
+    <div class="psec"><h4>도움</h4>
+      <div class="row-btns">
+        <button class="btn btn-sm" id="bAutoCorner">플레이트 자동 인식</button>
+        <button class="btn btn-sm" id="bFull">전체(보정 생략)</button>
+      </div>
+      <div class="phelp muted" style="margin-top:10px">이미 직사각형으로 잘라낸 이미지라면 <b>전체</b>를 눌러 보정을 건너뛰세요.</div>
+    </div>
+    <div class="psec"><h4>범례</h4>
+      <div class="legend"><div class="li"><span class="sw" style="background:#1a6bb5"></span>플레이트 모서리 핸들</div></div>
+    </div>`,
+
+  3: ()=>{
+    const fAvg=S.front?Math.round((S.front.ly+S.front.ry)/2):0, bAvg=S.baseline?Math.round((S.baseline.ly+S.baseline.ry)/2):0;
+    return `
+    <div class="ptitle"><span class="ico">⎯</span> 기준선 지정</div>
+    <div class="phelp"><b>baseline(원점)</b>과 <b>용매 front</b> 선을 맞추세요. 선의 <b>가운데를 잡으면</b> 선 전체가 위아래로 평행 이동하고, <b>왼쪽 끝/오른쪽 끝을 잡으면</b> 그 끝만 움직여 기울어진 플레이트에 맞출 수 있습니다. <span class="muted">(Ctrl+Z 되돌리기)</span></div>
+    <div class="psec"><h4>자동 제안</h4>
+      <button class="btn btn-sm" id="bAutoLines">자동으로 다시 잡기(수평)</button>
+    </div>
+    <div class="psec"><h4>평행 이동</h4>
+      <div class="field"><label>용매 front</label><input type="range" id="rFront" min="0" max="${S.rect?.h||100}" value="${fAvg}"><span class="val" id="vFront">${fAvg}</span></div>
+      <div class="field"><label>baseline</label><input type="range" id="rBase" min="0" max="${S.rect?.h||100}" value="${bAvg}"><span class="val" id="vBase">${bAvg}</span></div>
+    </div>
+    <div class="psec"><h4>범례</h4>
+      <div class="legend">
+        <div class="li"><span class="sw line" style="background:#BA7517"></span>용매 front (전개 끝)</div>
+        <div class="li"><span class="sw line" style="background:#1a6bb5"></span>baseline (시료 원점)</div>
+      </div></div>`;
+  },
+
+  4: ()=>{
+    const cnt=S.spots.length;
+    return `
+    <div class="ptitle"><span class="ico">●</span> Spot 확인</div>
+    <div class="phelp">자동 검출된 spot을 확인하세요. <b>드래그</b>로 이동, 빈 곳 <b>탭/클릭</b>으로 추가. 삭제 — <b>모바일</b>: spot/레인 핸들을 탭해 선택 → 빨간 ✕ 탭. <b>PC</b>: 우클릭(또는 선택 후 Delete·‘선택 삭제’). <span class="muted">Ctrl+Z 되돌리기.</span></div>
+    <div class="psec"><h4>자동 검출</h4>
+      <div class="field"><label>감도 <span class="muted">(둔감←→민감)</span></label>
+        <input type="range" id="rSens" min="0.4" max="3" step="0.1" value="${(3.4-S.sens).toFixed(1)}"><span class="val" id="vSens">●</span></div>
+      <div class="row-btns">
+        <button class="btn btn-sm" id="bDetectAll">다시 검출</button>
+        <button class="btn btn-sm" id="bDelSel" ${S.sel==null?'disabled':''}>선택 삭제</button>
+        <button class="btn btn-sm btn-danger" id="bClear">모두 지우기</button>
+      </div>
+      <div class="phelp muted" style="margin-top:8px">spot을 못 잡으면 <b>감도</b>를 오른쪽으로 올리세요. 노이즈가 잡히면 왼쪽으로.</div>
+    </div>
+    <div class="psec"><h4>레인 (현재 ${S.lanes.length}개)</h4>
+      <div class="row-btns">
+        <button class="btn btn-sm" id="bLaneMinus">– 레인</button>
+        <button class="btn btn-sm" id="bLanePlus">+ 레인</button>
+      </div>
+      <div class="phelp muted" style="margin-top:8px">레인 번호 핸들(baseline 아래)을 좌우로 드래그해 위치를 맞춥니다. 삭제(소속 spot 포함) — <b>모바일</b>: 핸들 탭 → ✕ 탭, <b>PC</b>: 우클릭. ‘– 레인’은 마지막 레인 제거.</div>
+    </div>
+    <div class="psec"><h4>검출된 spot: <span class="pill" id="spotCount">${cnt}개</span></h4></div>`;
+  },
+
+  5: ()=>{
+    const lanes=S.lanes.map((_,li)=>({li, label:S.laneLabels[li]||'', spots:S.spots.filter(s=>s.lane===li).sort((a,b)=>rfOf(b)-rfOf(a))}));
+    let rows='';
+    lanes.forEach(L=>{
+      if(!L.spots.length){
+        rows+=`<tr><td><input class="lbl" data-lane="${L.li}" value="${esc(L.label)}" placeholder="레인 ${L.li+1}"></td><td class="muted" colspan="2">spot 없음</td></tr>`;
+      }
+      L.spots.forEach((sp,k)=>{
+        const col=SPOT_COLORS[L.li%SPOT_COLORS.length];
+        rows+=`<tr>
+          <td>${k===0?`<input class="lbl" data-lane="${L.li}" value="${esc(L.label)}" placeholder="레인 ${L.li+1}">`:''}</td>
+          <td><span class="dot" style="background:${col}"></span> #${k+1}</td>
+          <td class="rf">${rfOf(sp).toFixed(3)}</td></tr>`;
+      });
+    });
+    return `
+    <div class="ptitle"><span class="ico">∑</span> 결과 & 내보내기</div>
+    <div class="phelp">Rf = (원점→spot 거리) / (원점→용매front 거리). 레인 라벨(화합물명)을 입력할 수 있습니다.</div>
+    <table class="tbl"><thead><tr><th>레인 / 라벨</th><th>Spot</th><th>Rf</th></tr></thead><tbody>${rows||'<tr><td colspan=3 class=muted>spot이 없습니다</td></tr>'}</tbody></table>
+    <div class="psec" style="margin-top:18px"><h4>내보내기</h4>
+      <div class="row-btns">
+        <button class="btn btn-sm btn-p" id="bCopy">📋 표 복사</button>
+        <button class="btn btn-sm" id="bCsv">⬇ CSV</button>
+        <button class="btn btn-sm" id="bPng">🖼️ 주석 이미지</button>
+      </div>
+    </div>
+    <div class="phelp muted">‘표 복사’는 ELN/엑셀에 바로 붙여넣을 수 있는 형식(TSV)입니다.</div>`;
+  }
+};
+function esc(s){ return String(s).replace(/"/g,'&quot;').replace(/</g,'&lt;'); }
+
+/* 패널 내부 버튼/입력 바인딩 */
+function bindPanel(){
+  const on=(id,ev,fn)=>{ const el=$('#'+id); if(el) el.addEventListener(ev,fn); };
+  // step2
+  on('bAutoCorner','click',()=>{ snapshot(); S.corners=autoCorners(S.work); render(); toast('플레이트 코너 자동 인식'); });
+  on('bFull','click',()=>{ snapshot(); const {w,h}=S.work; S.corners=[{x:0,y:0},{x:w,y:0},{x:w,y:h},{x:0,y:h}]; render(); toast('전체 영역 사용'); });
+  // step3 (슬라이더는 기울기를 유지한 채 선분 전체를 평행 이동)
+  on('bAutoLines','click',()=>{ snapshot(); autoLines(); refreshPanel(); render(); toast('기준선 자동 제안'); });
+  on('rFront','pointerdown',()=>snapshot());
+  on('rBase','pointerdown',()=>snapshot());
+  on('rFront','input',e=>{ const y=+e.target.value, c=(S.front.ly+S.front.ry)/2, d=y-c; S.front.ly+=d; S.front.ry+=d; $('#vFront').textContent=y; render(); });
+  on('rBase','input',e=>{ const y=+e.target.value, c=(S.baseline.ly+S.baseline.ry)/2, d=y-c; S.baseline.ly+=d; S.baseline.ry+=d; $('#vBase').textContent=y; render(); });
+  // step4
+  on('rSens','pointerdown',()=>snapshot());
+  on('rSens','input',e=>{ S.sens=3.4-(+e.target.value); detectSpots(); const sc=$('#spotCount'); if(sc) sc.textContent=S.spots.length+'개'; render(); });
+  on('bDetectAll','click',()=>{ snapshot(); detectSpots(); refreshPanel(); render(); toast(`${S.spots.length}개 spot 검출`); });
+  on('bDelSel','click',()=>{ if(S.sel!=null){snapshot(); S.spots.splice(S.sel,1);S.sel=null; refreshPanel(); render();} });
+  on('bClear','click',()=>{ snapshot(); S.spots=[]; S.sel=null; S.selLane=null; refreshPanel(); render(); });
+  on('bLanePlus','click',()=>{ snapshot(); const {w}=S.gray; S.lanes.push(Math.round(w/2)); S.laneLabels.push(''); refreshPanel(); render(); });
+  on('bLaneMinus','click',()=>{ if(S.lanes.length>1){ snapshot(); const li=S.lanes.length-1; S.lanes.pop(); S.laneLabels.pop();
+      S.spots=S.spots.filter(s=>s.lane!==li); S.sel=null; S.selLane=null; refreshPanel(); render(); } });
+  // step5
+  on('bCopy','click',copyTable); on('bCsv','click',downloadCSV); on('bPng','click',downloadPNG);
+  document.querySelectorAll('.lbl').forEach(inp=>inp.addEventListener('input',e=>{ S.laneLabels[+e.target.dataset.lane]=e.target.value; }));
+}
+
+/* ════════════ 내보내기 ════════════ */
+function resultRows(){
+  const rows=[];
+  S.lanes.forEach((_,li)=>{
+    const sps=S.spots.filter(s=>s.lane===li).sort((a,b)=>rfOf(b)-rfOf(a));
+    sps.forEach((sp,k)=> rows.push({lane:li+1, label:S.laneLabels[li]||'', n:k+1, rf:rfOf(sp)}));
+  });
+  return rows;
+}
+function copyTable(){
+  const rows=resultRows();
+  let t='레인\t라벨\tSpot\tRf\n';
+  rows.forEach(r=> t+=`${r.lane}\t${r.label}\t#${r.n}\t${r.rf.toFixed(3)}\n`);
+  navigator.clipboard.writeText(t).then(()=>toast('표를 클립보드에 복사했습니다')).catch(()=>toast('복사 실패'));
+}
+function downloadCSV(){
+  const rows=resultRows();
+  let t='Lane,Label,Spot,Rf\n';
+  rows.forEach(r=> t+=`${r.lane},"${(r.label||'').replace(/"/g,'""')}",${r.n},${r.rf.toFixed(3)}\n`);
+  const blob=new Blob(['﻿'+t],{type:'text/csv;charset=utf-8'});
+  triggerDownload(blob,'tlc-rf.csv'); toast('CSV 저장');
+}
+function downloadPNG(){
+  // 보정 이미지 + 오버레이를 offscreen에 그려 저장
+  const r=S.rect, c=document.createElement('canvas'); c.width=r.w; c.height=r.h;
+  const x=c.getContext('2d'); x.drawImage(r.canvas,0,0);
+  const prevView=view, prevCtx=ctx;        // drawAnalysis는 전역 ctx/view 사용 → 임시 교체
+  /* eslint-disable no-global-assign */
+  view=r; window._octx=x;
+  // 간이 재그리기 (step4 핸들 제외, 결과용)
+  const u={lw:Math.max(2,r.w/350), r:Math.max(9,r.w/55), font:Math.max(13,r.w/42)};
+  drawOnto(x,u);
+  view=prevView;
+  c.toBlob(b=>{ triggerDownload(b,'tlc-rf.png'); toast('주석 이미지 저장'); });
+}
+function drawOnto(x,u){
+  const seg=(line,color,label)=>{
+    x.lineWidth=u.lw; x.strokeStyle=color; x.setLineDash([u.r*0.9,u.r*0.6]);
+    x.beginPath(); x.moveTo(line.lx,line.ly); x.lineTo(line.rx,line.ry); x.stroke(); x.setLineDash([]);
+    x.fillStyle=color; x.font=`600 ${u.font}px sans-serif`;
+    const tw=x.measureText(label).width; x.fillRect(4,line.ly-u.font-6,tw+12,u.font+8);
+    x.fillStyle='#fff'; x.fillText(label,10,line.ly-7);
+  };
+  seg(S.front,'#BA7517','solvent front'); seg(S.baseline,'#1a6bb5','baseline');
+  S.spots.forEach(sp=>{
+    const cx=sp.x, col=SPOT_COLORS[sp.lane%SPOT_COLORS.length];
+    x.beginPath(); x.arc(cx,sp.y,u.r*0.95,0,7); x.fillStyle=col+'cc'; x.fill();
+    x.lineWidth=u.lw; x.strokeStyle='#fff'; x.stroke();
+    const rf=rfOf(sp).toFixed(2); x.font=`600 ${u.font*0.82}px monospace`;
+    const tw=x.measureText(rf).width; x.fillStyle=col; x.fillRect(cx+u.r+2,sp.y-u.font*0.6,tw+8,u.font);
+    x.fillStyle='#fff'; x.fillText(rf,cx+u.r+6,sp.y+u.font*0.28);
+  });
+}
+function triggerDownload(blob,name){
+  const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=name;
+  document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(a.href),1000);
+}
+
+/* ════════════ 네비게이션 ════════════ */
+$('#btnNext').addEventListener('click', ()=>{
+  if(S.step===2){ buildRect(); autoLines(); goStep(3); }
+  else if(S.step===3){
+    const bAvg=(S.baseline.ly+S.baseline.ry)/2, fAvg=(S.front.ly+S.front.ry)/2;
+    if(Math.abs(bAvg-fAvg)<8){ toast('baseline과 용매 front가 너무 가깝습니다'); return; }
+    if(!S.spots.length){ detectSpots(); }
+    goStep(4);
+  }
+  else if(S.step===4){ goStep(5); }
+  else if(S.step<5){ goStep(S.step+1); }
+});
+$('#btnPrev').addEventListener('click', ()=>{ if(S.step>1) goStep(S.step-1); });
+document.querySelectorAll('.step').forEach(el=>el.addEventListener('click',()=>{
+  const s=+el.dataset.step; if(!S.work) return;
+  if(s===1){ goStep(1); return; }
+  if(s>=3 && !S.rect) return;     // 보정 전에는 3+로 못 감
+  goStep(s);
+}));
+
+/* ⚡ 전자동: 코너→보정→기준선→레인→spot→결과 */
+$('#btnAuto').addEventListener('click', ()=>{
+  if(!S.work) return;
+  buildRect(); autoLines(); detectSpots();
+  goStep(5);
+  toast(`전자동 완료 — spot ${S.spots.length}개. 4단계에서 검토/수정 가능`);
+});
+
+/* ════════════ 입력 이벤트 ════════════ */
+$('#drop').addEventListener('click', ()=>$('#file').click());
+$('#file').addEventListener('change', e=>{ if(e.target.files[0]) loadFromFile(e.target.files[0]); e.target.value=''; });
+const drop=$('#drop'), stage=$('#stage');
+['dragenter','dragover'].forEach(ev=>stage.addEventListener(ev,e=>{e.preventDefault(); drop.classList.add('over');}));
+['dragleave','drop'].forEach(ev=>stage.addEventListener(ev,e=>{e.preventDefault(); if(ev==='dragleave'&&e.target!==stage)return; drop.classList.remove('over');}));
+stage.addEventListener('drop', e=>{ e.preventDefault(); const f=e.dataTransfer.files[0]; if(f) loadFromFile(f); });
+window.addEventListener('paste', e=>{
+  const items=e.clipboardData?.items||[];
+  for(const it of items){ if(it.type.startsWith('image/')){ loadFromFile(it.getAsFile()); e.preventDefault(); return; } }
+});
+$('#btnReset').addEventListener('click', ()=>{
+  S.work=null; S.rect=null; S.gray=null; S.baseline=null; S.front=null;
+  S.spots=[]; S.lanes=[]; S.laneLabels=[]; S.sel=null; S.selLane=null;
+  $('#btnAuto').disabled=true; view=null; goStep(1);
+});
+
+/* 초기화 */
+goStep(1);
+</script>
+</body>
+</html>
