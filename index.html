@@ -74,9 +74,19 @@ body{
   justify-content:center; padding:18px; background:
    repeating-conic-gradient(#e7e9ee 0% 25%, #eef0f4 0% 50%) 50%/22px 22px;}
 .canvas-wrap{position:relative; max-width:100%; max-height:100%; display:none;
+  align-items:center; justify-content:center;
   box-shadow:0 4px 20px rgba(20,30,50,.13); border-radius:4px; overflow:hidden; background:#fff;}
 #cv{display:block; max-width:100%; max-height:calc(100vh - 200px);
   touch-action:none; cursor:crosshair;}
+
+/* 줌 컨트롤 (모바일 전용) */
+.zoom-ctl{display:none; position:absolute; right:12px; bottom:12px; z-index:5;
+  flex-direction:column; gap:8px;}
+.zbtn{width:44px; height:44px; border-radius:50%; border:1px solid var(--bd2);
+  background:rgba(255,255,255,.94); color:var(--tx); font-size:21px; font-weight:600;
+  display:grid; place-items:center; cursor:pointer; box-shadow:0 2px 9px rgba(20,30,50,.22);
+  -webkit-user-select:none; user-select:none; line-height:1;}
+.zbtn:active{background:var(--bg2); transform:translateY(1px);}
 
 /* 드롭존 */
 .drop{width:min(560px,92%); border:2.5px dashed var(--bd2); border-radius:18px;
@@ -150,9 +160,12 @@ input[type=range]{flex:1.6; accent-color:var(--blue);}
 
   /* 좌우 → 상하 스택 */
   .main{ flex-direction:column; flex:none; overflow:visible; }
-  .stage{ flex:none; padding:12px; }
-  .canvas-wrap{ max-height:none; }
-  #cv{ max-height:54vh; }                 /* 캔버스는 화면 절반 정도, 아래 패널 확보 */
+  .stage{ flex:none; padding:8px; overflow:hidden; }
+  /* 캔버스는 폭/높이 contain → 스크롤해도 크기 고정. 줌/팬은 transform으로 처리 */
+  .canvas-wrap{ width:100%; height:var(--wrapH,56vh); max-height:none; }
+  #cv{ width:auto; height:auto; max-width:100%; max-height:100%;
+    transform-origin:center center; will-change:transform; }
+  .zoom-ctl.on{ display:flex; }
 
   .panel{ width:100%; border-left:0; border-top:1px solid var(--bd); }
   .panel-body{ flex:none; overflow:visible; padding:16px; }
@@ -201,6 +214,11 @@ input[type=range]{flex:1.6; accent-color:var(--blue);}
       </p>
     </div>
     <div class="canvas-wrap" id="cvWrap"><canvas id="cv"></canvas></div>
+    <div class="zoom-ctl" id="zoomCtl">
+      <button class="zbtn" id="zIn" aria-label="확대">＋</button>
+      <button class="zbtn" id="zFit" aria-label="원래대로">⤢</button>
+      <button class="zbtn" id="zOut" aria-label="축소">−</button>
+    </div>
   </div>
 
   <div class="panel">
@@ -242,6 +260,7 @@ const S = {
   sel: null,                  // 선택된 spot index
   selLane: null,              // 선택된 레인 index (모바일 삭제용)
   sens: 1.0,                  // spot 검출 감도 k (작을수록 민감)
+  zoom: 1, panX: 0, panY: 0,  // 모바일 캔버스 줌/팬 (transform)
 };
 let view = null;              // 현재 캔버스에 그려진 이미지 {canvas,w,h}
 
@@ -523,8 +542,29 @@ function rfOf(spot){
 }
 
 /* ════════════ 렌더링 ════════════ */
-function setView(v){ view=v; cv.width=v.w; cv.height=v.h; render(); }
-function uiScale(){ return { lw:Math.max(2,view.w/350), r:Math.max(9,view.w/55), font:Math.max(13,view.w/42) }; }
+function setView(v){ view=v; cv.width=v.w; cv.height=v.h; S.zoom=1; S.panX=0; S.panY=0; applyTransform(); render(); }
+/* 오버레이 크기를 "화면 px" 기준으로 → 표시 배율과 무관하게 일정(작은 화면·줌에서도 적정). */
+function uiScale(){
+  const cssW = (cv.getBoundingClientRect().width) || view.w;
+  const k = Math.max(0.5, Math.min(8, view.w / Math.max(1, cssW)));   // 캔버스 px / 화면 px
+  const big = touchUI() ? 1.5 : 1;               // 모바일에서 더 크게
+  return { lw:Math.max(2, 2.4*k), r:Math.max(9, 12*k*big), font:Math.max(12, 13*k*big) };
+}
+/* ── 모바일 줌/팬 (CSS transform; toImg은 getBoundingClientRect 기반이라 좌표 자동 보정) ── */
+function setWrapH(){ document.documentElement.style.setProperty('--wrapH', Math.round(window.innerHeight*0.56)+'px'); }
+function applyTransform(){
+  cv.style.transform = touchUI() ? `translate(${S.panX}px,${S.panY}px) scale(${S.zoom})` : '';
+}
+function clampPan(){
+  const wrap=$('#cvWrap'); if(!wrap) return;
+  const ox=Math.max(0,(cv.offsetWidth*S.zoom - wrap.clientWidth)/2);
+  const oy=Math.max(0,(cv.offsetHeight*S.zoom - wrap.clientHeight)/2);
+  S.panX=Math.max(-ox,Math.min(ox,S.panX));
+  S.panY=Math.max(-oy,Math.min(oy,S.panY));
+}
+function zoomBy(f){ S.zoom=Math.max(1,Math.min(4,S.zoom*f)); if(S.zoom===1){S.panX=0;S.panY=0;} clampPan(); applyTransform(); }
+setWrapH();
+window.addEventListener('orientationchange', ()=>setTimeout(()=>{ setWrapH(); clampPan(); applyTransform(); },300));
 /* 모바일/터치 UI 여부 — 이때만 ✕ 삭제 배지 표시 (PC는 우클릭·Delete 사용) */
 function touchUI(){ return window.matchMedia('(max-width:680px)').matches || window.matchMedia('(pointer:coarse)').matches; }
 /* 선택된 spot 옆 삭제(✕) 배지 위치 — 화면 밖이면 반대편으로 */
@@ -547,6 +587,25 @@ function render(){
   const u=uiScale();
   if(S.step===2) drawCorners(u);
   else if(S.step>=3) drawAnalysis(u);
+  // 코너 드래그 중 돋보기
+  if(S.step===2 && drag && drag.type==='corner') drawLoupe(S.corners[drag.idx], u);
+}
+/* 돋보기: 드래그 중인 모서리 주변을 확대해 반대 사분면에 표시(손가락에 안 가림) */
+function drawLoupe(pt,u){
+  const Z=2.6, R=Math.max(56, view.w*0.16), m=R+10, half=R/Z;
+  const lx=(pt.x < view.w/2) ? view.w-m : m;
+  const ly=(pt.y < view.h/2) ? view.h-m : m;
+  ctx.save();
+  ctx.beginPath(); ctx.arc(lx,ly,R,0,7); ctx.closePath();
+  ctx.fillStyle='#fff'; ctx.fill(); ctx.clip();
+  ctx.drawImage(view.canvas, pt.x-half, pt.y-half, half*2, half*2, lx-R, ly-R, R*2, R*2);
+  ctx.lineWidth=Math.max(1.5,u.lw*0.7); ctx.strokeStyle='rgba(26,107,181,.9)';
+  ctx.beginPath(); ctx.moveTo(lx-R*0.55,ly); ctx.lineTo(lx+R*0.55,ly);
+  ctx.moveTo(lx,ly-R*0.55); ctx.lineTo(lx,ly+R*0.55); ctx.stroke();
+  ctx.beginPath(); ctx.arc(lx,ly,Math.max(4,R*0.09),0,7); ctx.strokeStyle='#1a6bb5'; ctx.lineWidth=Math.max(2,u.lw); ctx.stroke();
+  ctx.restore();
+  ctx.lineWidth=Math.max(2.5,u.lw*1.2); ctx.strokeStyle='#1a6bb5';
+  ctx.beginPath(); ctx.arc(lx,ly,R,0,7); ctx.stroke();
 }
 function drawCorners(u){
   const C=S.corners;
@@ -638,8 +697,18 @@ function toImg(e){
   return { x:(e.clientX-r.left)*(cv.width/r.width), y:(e.clientY-r.top)*(cv.height/r.height) };
 }
 let drag=null; // {type, idx}
+const pointers=new Map(); let gesture=null;
 cv.addEventListener('pointerdown', e=>{
   if(!view) return;
+  pointers.set(e.pointerId,{x:e.clientX,y:e.clientY});
+  if(touchUI() && pointers.size===2){          // 두 손가락 → 핀치 줌 + 팬 (편집 취소)
+    drag=null;
+    const pt=[...pointers.values()];
+    gesture={ d0:Math.hypot(pt[0].x-pt[1].x,pt[0].y-pt[1].y), mx0:(pt[0].x+pt[1].x)/2, my0:(pt[0].y+pt[1].y)/2,
+              z0:S.zoom, px0:S.panX, py0:S.panY };
+    return;
+  }
+  if(gesture) return;
   const p=toImg(e), u=uiScale(), hit=u.r*1.8;
   // 선분의 어느 부분을 잡았는지: 왼끝/오른끝(기울기) vs 가운데(평행 이동)
   const lineGrab=(line)=>{
@@ -685,6 +754,14 @@ cv.addEventListener('pointerdown', e=>{
   }
 });
 cv.addEventListener('pointermove', e=>{
+  if(pointers.has(e.pointerId)) pointers.set(e.pointerId,{x:e.clientX,y:e.clientY});
+  if(gesture && pointers.size>=2){             // 핀치 줌 + 팬
+    const pt=[...pointers.values()];
+    const d=Math.hypot(pt[0].x-pt[1].x,pt[0].y-pt[1].y), mx=(pt[0].x+pt[1].x)/2, my=(pt[0].y+pt[1].y)/2;
+    S.zoom=Math.max(1,Math.min(4, gesture.z0*(d/Math.max(1,gesture.d0))));
+    S.panX=gesture.px0+(mx-gesture.mx0); S.panY=gesture.py0+(my-gesture.my0);
+    clampPan(); applyTransform(); return;
+  }
   if(!drag||!view) return;
   const p=toImg(e);
   const cl=(v,a,b)=>Math.max(a,Math.min(b,v));
@@ -704,7 +781,15 @@ cv.addEventListener('pointermove', e=>{
       sp.lane=nl; }
   render();
 });
-cv.addEventListener('pointerup', ()=>{ if(drag&&(drag.type==='spot'||drag.type==='lane')) refreshPanel(); drag=null; });
+function endPointer(e){
+  pointers.delete(e.pointerId);
+  if(pointers.size<2) gesture=null;
+  if(drag&&(drag.type==='spot'||drag.type==='lane')) refreshPanel();
+  if(drag&&drag.type==='corner') render();      // 돋보기 제거
+  drag=null;
+}
+cv.addEventListener('pointerup', endPointer);
+cv.addEventListener('pointercancel', endPointer);
 // 우클릭 = 개별 spot 삭제 (한 레인에 여러 개 있어도 가장 가까운 것만 제거)
 cv.addEventListener('contextmenu', e=>{
   if(S.step!==4||!view){ return; }
@@ -733,8 +818,9 @@ function goStep(n){
   S.step=n;
   // 뷰 이미지 결정
   if(n===1){ $('#drop').style.display='block'; $('#cvWrap').style.display='none'; }
-  else { $('#drop').style.display='none'; $('#cvWrap').style.display='block';
+  else { $('#drop').style.display='none'; $('#cvWrap').style.display='flex';
     setView(n===2 ? S.work : S.rect); }
+  $('#zoomCtl').classList.toggle('on', n>=2);   // 줌 컨트롤(모바일) 표시
   // 스텝퍼
   document.querySelectorAll('.step').forEach(el=>{
     const s=+el.dataset.step; el.classList.toggle('active',s===n);
@@ -935,6 +1021,11 @@ function triggerDownload(blob,name){
   const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=name;
   document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(a.href),1000);
 }
+
+/* ════════════ 줌 버튼 (모바일) ════════════ */
+$('#zIn').addEventListener('click', ()=>zoomBy(1.4));
+$('#zOut').addEventListener('click', ()=>zoomBy(1/1.4));
+$('#zFit').addEventListener('click', ()=>{ S.zoom=1; S.panX=0; S.panY=0; applyTransform(); });
 
 /* ════════════ 네비게이션 ════════════ */
 $('#btnNext').addEventListener('click', ()=>{
