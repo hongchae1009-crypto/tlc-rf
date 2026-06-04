@@ -719,7 +719,7 @@ cv.addEventListener('pointerdown', e=>{
   }
   if(gesture) return;
   // 결과 단계: 1.5초 길게 누르면 마커 없는 원본 TLC 미리보기
-  if(S.step===5){ peekStart={x:e.clientX,y:e.clientY}; pressTimer=setTimeout(()=>{ pressTimer=null; S.peek=true; render(); },1500); return; }
+  if(S.step===5){ peekStart={x:e.clientX,y:e.clientY}; pressTimer=setTimeout(()=>{ pressTimer=null; S.peek=true; render(); },500); return; }
   const p=toImg(e), u=uiScale(), hit=u.r*1.8;
   // 선분의 어느 부분을 잡았는지: 왼끝/오른끝(기울기) vs 가운데(평행 이동)
   const lineGrab=(line)=>{
@@ -938,7 +938,7 @@ const PANEL = {
     });
     return `
     <div class="ptitle"><span class="ico">∑</span> 결과 & 내보내기</div>
-    <div class="phelp">Rf = (원점→spot 거리) / (원점→용매front 거리). 레인 라벨(화합물명)을 입력할 수 있습니다. <span class="muted">이미지를 1.5초 길게 누르면 마커 없는 원본이 보입니다(떼면 복귀).</span></div>
+    <div class="phelp">Rf = (원점→spot 거리) / (원점→용매front 거리). 레인 라벨(화합물명)을 입력할 수 있습니다. <span class="muted">이미지를 0.5초 길게 누르면 마커 없는 원본이 보입니다(떼면 복귀).</span></div>
     <table class="tbl"><thead><tr><th>레인 / 라벨</th><th>Spot</th><th>Rf</th></tr></thead><tbody>${rows||'<tr><td colspan=3 class=muted>spot이 없습니다</td></tr>'}</tbody></table>
     <div class="psec" style="margin-top:18px"><h4>내보내기</h4>
       <div class="row-btns">
