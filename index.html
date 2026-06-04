@@ -262,6 +262,7 @@ const S = {
   sens: 1.0,                  // spot 검출 감도 k (작을수록 민감)
   zoom: 1, panX: 0, panY: 0,  // 모바일 캔버스 줌/팬 (transform)
   peek: false,                // 결과 단계에서 길게 누르면 마커 없는 원본 미리보기
+  labelScale: 1,              // Rf(피크) 라벨 글씨 크기 배율
 };
 let view = null;              // 현재 캔버스에 그려진 이미지 {canvas,w,h}
 
@@ -680,12 +681,12 @@ function drawAnalysis(u){
     ctx.fillStyle=col+'cc'; ctx.fill();
     ctx.lineWidth=u.lw*(seld?1.6:1); ctx.strokeStyle=seld?'#fff':'#ffffffaa'; ctx.stroke();
     if(seld){ ctx.lineWidth=u.lw; ctx.strokeStyle=col; ctx.beginPath(); ctx.arc(cx,sp.y,u.r*1.5,0,7); ctx.stroke(); }
-    // Rf 라벨
-    const rf=rfOf(sp).toFixed(2);
-    ctx.font=`600 ${u.font*0.82}px var(--fm,monospace)`;
+    // Rf 라벨 (크기 조절: S.labelScale)
+    const rf=rfOf(sp).toFixed(2), lf=u.font*0.82*S.labelScale;
+    ctx.font=`600 ${lf}px var(--fm,monospace)`;
     const tw=ctx.measureText(rf).width;
-    ctx.fillStyle=col; ctx.fillRect(cx+u.r+2,sp.y-u.font*0.6,tw+8,u.font);
-    ctx.fillStyle='#fff'; ctx.fillText(rf,cx+u.r+6,sp.y+u.font*0.28);
+    ctx.fillStyle=col; ctx.fillRect(cx+u.r+2,sp.y-lf*0.72,tw+lf*0.6,lf*1.45);
+    ctx.fillStyle='#fff'; ctx.fillText(rf,cx+u.r+lf*0.4,sp.y+lf*0.4);
     // 선택된 spot: 삭제(✕) 배지 — 모바일(터치)에서만 표시
     if(seld && touchUI()){
       const b=spotBadge(sp,u);
@@ -940,7 +941,10 @@ const PANEL = {
     <div class="ptitle"><span class="ico">∑</span> 결과 & 내보내기</div>
     <div class="phelp">Rf = (원점→spot 거리) / (원점→용매front 거리). 레인 라벨(화합물명)을 입력할 수 있습니다. <span class="muted">이미지를 0.5초 길게 누르면 마커 없는 원본이 보입니다(떼면 복귀).</span></div>
     <table class="tbl"><thead><tr><th>레인 / 라벨</th><th>Spot</th><th>Rf</th></tr></thead><tbody>${rows||'<tr><td colspan=3 class=muted>spot이 없습니다</td></tr>'}</tbody></table>
-    <div class="psec" style="margin-top:18px"><h4>내보내기</h4>
+    <div class="psec" style="margin-top:16px"><h4>Rf 라벨 글씨 크기</h4>
+      <div class="field"><label>작게 ↔ 크게</label><input type="range" id="rLblSize" min="0.6" max="2.4" step="0.1" value="${S.labelScale}"><span class="val" id="vLblSize">${Math.round(S.labelScale*100)}%</span></div>
+    </div>
+    <div class="psec" style="margin-top:6px"><h4>내보내기</h4>
       <div class="row-btns">
         <button class="btn btn-sm btn-p" id="bCopy">📋 표 복사</button>
         <button class="btn btn-sm" id="bCsv">⬇ CSV</button>
@@ -974,6 +978,7 @@ function bindPanel(){
   on('bLaneMinus','click',()=>{ if(S.lanes.length>1){ snapshot(); const li=S.lanes.length-1; S.lanes.pop(); S.laneLabels.pop();
       S.spots=S.spots.filter(s=>s.lane!==li); S.sel=null; S.selLane=null; refreshPanel(); render(); } });
   // step5
+  on('rLblSize','input',e=>{ S.labelScale=+e.target.value; const v=$('#vLblSize'); if(v) v.textContent=Math.round(S.labelScale*100)+'%'; render(); });
   on('bCopy','click',copyTable); on('bCsv','click',downloadCSV); on('bPng','click',downloadPNG);
   document.querySelectorAll('.lbl').forEach(inp=>inp.addEventListener('input',e=>{ S.laneLabels[+e.target.dataset.lane]=e.target.value; }));
 }
@@ -1026,9 +1031,9 @@ function drawOnto(x,u){
     const cx=sp.x, col=SPOT_COLORS[sp.lane%SPOT_COLORS.length];
     x.beginPath(); x.arc(cx,sp.y,u.r*0.95,0,7); x.fillStyle=col+'cc'; x.fill();
     x.lineWidth=u.lw; x.strokeStyle='#fff'; x.stroke();
-    const rf=rfOf(sp).toFixed(2); x.font=`600 ${u.font*0.82}px monospace`;
-    const tw=x.measureText(rf).width; x.fillStyle=col; x.fillRect(cx+u.r+2,sp.y-u.font*0.6,tw+8,u.font);
-    x.fillStyle='#fff'; x.fillText(rf,cx+u.r+6,sp.y+u.font*0.28);
+    const rf=rfOf(sp).toFixed(2), lf=u.font*0.82*S.labelScale; x.font=`600 ${lf}px monospace`;
+    const tw=x.measureText(rf).width; x.fillStyle=col; x.fillRect(cx+u.r+2,sp.y-lf*0.72,tw+lf*0.6,lf*1.45);
+    x.fillStyle='#fff'; x.fillText(rf,cx+u.r+lf*0.4,sp.y+lf*0.4);
   });
 }
 function triggerDownload(blob,name){
