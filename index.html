@@ -261,6 +261,7 @@ const S = {
   selLane: null,              // 선택된 레인 index (모바일 삭제용)
   sens: 1.0,                  // spot 검출 감도 k (작을수록 민감)
   zoom: 1, panX: 0, panY: 0,  // 모바일 캔버스 줌/팬 (transform)
+  peek: false,                // 결과 단계에서 길게 누르면 마커 없는 원본 미리보기
 };
 let view = null;              // 현재 캔버스에 그려진 이미지 {canvas,w,h}
 
@@ -585,6 +586,12 @@ function render(){
   ctx.clearRect(0,0,cv.width,cv.height);
   ctx.drawImage(view.canvas,0,0);
   const u=uiScale();
+  if(S.peek){      // 길게 누르는 동안: 오버레이 없이 원본 TLC만
+    ctx.fillStyle='rgba(20,30,50,.55)'; ctx.font=`600 ${u.font}px var(--f,sans-serif)`;
+    const t='원본 TLC (누르는 중)', tw=ctx.measureText(t).width;
+    ctx.fillRect(8,8,tw+18,u.font+12); ctx.fillStyle='#fff'; ctx.fillText(t,17,8+u.font);
+    return;
+  }
   if(S.step===2) drawCorners(u);
   else if(S.step>=3) drawAnalysis(u);
   // 코너 드래그 중 돋보기
@@ -609,11 +616,11 @@ function drawLoupe(pt,u){
 }
 function drawCorners(u){
   const C=S.corners;
+  // 외곽선만 (반투명 채움은 제거 — 플레이트 경계와 겹쳐 "박스 두 개"처럼 보였음)
   ctx.lineWidth=u.lw; ctx.strokeStyle='rgba(26,107,181,.95)';
-  ctx.fillStyle='rgba(26,107,181,.12)';
   ctx.beginPath(); ctx.moveTo(C[0].x,C[0].y);
   for(let i=1;i<4;i++) ctx.lineTo(C[i].x,C[i].y);
-  ctx.closePath(); ctx.fill(); ctx.stroke();
+  ctx.closePath(); ctx.stroke();
   const lbl=['TL','TR','BR','BL'];
   C.forEach((p,i)=>{
     ctx.beginPath(); ctx.arc(p.x,p.y,u.r,0,7); ctx.fillStyle='#fff'; ctx.fill();
@@ -698,17 +705,21 @@ function toImg(e){
 }
 let drag=null; // {type, idx}
 const pointers=new Map(); let gesture=null;
+let pressTimer=null, peekStart=null;
+function cancelPress(){ if(pressTimer){ clearTimeout(pressTimer); pressTimer=null; } if(S.peek){ S.peek=false; render(); } }
 cv.addEventListener('pointerdown', e=>{
   if(!view) return;
   pointers.set(e.pointerId,{x:e.clientX,y:e.clientY});
   if(touchUI() && pointers.size===2){          // 두 손가락 → 핀치 줌 + 팬 (편집 취소)
-    drag=null;
+    drag=null; cancelPress();
     const pt=[...pointers.values()];
     gesture={ d0:Math.hypot(pt[0].x-pt[1].x,pt[0].y-pt[1].y), mx0:(pt[0].x+pt[1].x)/2, my0:(pt[0].y+pt[1].y)/2,
               z0:S.zoom, px0:S.panX, py0:S.panY };
     return;
   }
   if(gesture) return;
+  // 결과 단계: 1.5초 길게 누르면 마커 없는 원본 TLC 미리보기
+  if(S.step===5){ peekStart={x:e.clientX,y:e.clientY}; pressTimer=setTimeout(()=>{ pressTimer=null; S.peek=true; render(); },1500); return; }
   const p=toImg(e), u=uiScale(), hit=u.r*1.8;
   // 선분의 어느 부분을 잡았는지: 왼끝/오른끝(기울기) vs 가운데(평행 이동)
   const lineGrab=(line)=>{
@@ -755,6 +766,7 @@ cv.addEventListener('pointerdown', e=>{
 });
 cv.addEventListener('pointermove', e=>{
   if(pointers.has(e.pointerId)) pointers.set(e.pointerId,{x:e.clientX,y:e.clientY});
+  if(pressTimer && peekStart && Math.hypot(e.clientX-peekStart.x,e.clientY-peekStart.y)>12){ clearTimeout(pressTimer); pressTimer=null; }
   if(gesture && pointers.size>=2){             // 핀치 줌 + 팬
     const pt=[...pointers.values()];
     const d=Math.hypot(pt[0].x-pt[1].x,pt[0].y-pt[1].y), mx=(pt[0].x+pt[1].x)/2, my=(pt[0].y+pt[1].y)/2;
@@ -784,12 +796,14 @@ cv.addEventListener('pointermove', e=>{
 function endPointer(e){
   pointers.delete(e.pointerId);
   if(pointers.size<2) gesture=null;
+  cancelPress();                                // 길게누르기 타이머/미리보기 해제
   if(drag&&(drag.type==='spot'||drag.type==='lane')) refreshPanel();
   if(drag&&drag.type==='corner') render();      // 돋보기 제거
   drag=null;
 }
 cv.addEventListener('pointerup', endPointer);
 cv.addEventListener('pointercancel', endPointer);
+cv.addEventListener('pointerleave', cancelPress);
 // 우클릭 = 개별 spot 삭제 (한 레인에 여러 개 있어도 가장 가까운 것만 제거)
 cv.addEventListener('contextmenu', e=>{
   if(S.step!==4||!view){ return; }
@@ -924,7 +938,7 @@ const PANEL = {
     });
     return `
     <div class="ptitle"><span class="ico">∑</span> 결과 & 내보내기</div>
-    <div class="phelp">Rf = (원점→spot 거리) / (원점→용매front 거리). 레인 라벨(화합물명)을 입력할 수 있습니다.</div>
+    <div class="phelp">Rf = (원점→spot 거리) / (원점→용매front 거리). 레인 라벨(화합물명)을 입력할 수 있습니다. <span class="muted">이미지를 1.5초 길게 누르면 마커 없는 원본이 보입니다(떼면 복귀).</span></div>
     <table class="tbl"><thead><tr><th>레인 / 라벨</th><th>Spot</th><th>Rf</th></tr></thead><tbody>${rows||'<tr><td colspan=3 class=muted>spot이 없습니다</td></tr>'}</tbody></table>
     <div class="psec" style="margin-top:18px"><h4>내보내기</h4>
       <div class="row-btns">
