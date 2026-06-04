@@ -588,7 +588,7 @@ function render(){
   ctx.drawImage(view.canvas,0,0);
   const u=uiScale();
   if(S.peek){      // 길게 누르는 동안: 오버레이 없이 원본 TLC만
-    ctx.fillStyle='rgba(20,30,50,.55)'; ctx.font=`600 ${u.font}px var(--f,sans-serif)`;
+    ctx.fillStyle='rgba(20,30,50,.55)'; ctx.font=`600 ${u.font}px 'Pretendard','Apple SD Gothic Neo',sans-serif`;
     const t='원본 TLC (누르는 중)', tw=ctx.measureText(t).width;
     ctx.fillRect(8,8,tw+18,u.font+12); ctx.fillStyle='#fff'; ctx.fillText(t,17,8+u.font);
     return;
@@ -627,14 +627,14 @@ function drawCorners(u){
     ctx.beginPath(); ctx.arc(p.x,p.y,u.r,0,7); ctx.fillStyle='#fff'; ctx.fill();
     ctx.lineWidth=u.lw; ctx.strokeStyle='#1a6bb5'; ctx.stroke();
     ctx.fillStyle='#1a6bb5'; ctx.beginPath(); ctx.arc(p.x,p.y,u.r*0.42,0,7); ctx.fill();
-    ctx.fillStyle='#1a6bb5'; ctx.font=`600 ${u.font*0.8}px var(--fm,monospace)`;
+    ctx.fillStyle='#1a6bb5'; ctx.font=`600 ${u.font*0.8}px 'JetBrains Mono','Fira Code',monospace`;
     ctx.fillText(lbl[i], p.x+u.r+3, p.y-u.r*0.4);
   });
 }
 function drawSeg(line,color,label,u){
   ctx.lineWidth=u.lw; ctx.strokeStyle=color; ctx.setLineDash([u.r*0.9,u.r*0.6]);
   ctx.beginPath(); ctx.moveTo(line.lx,line.ly); ctx.lineTo(line.rx,line.ry); ctx.stroke(); ctx.setLineDash([]);
-  ctx.fillStyle=color; ctx.font=`600 ${u.font}px var(--f,sans-serif)`;
+  ctx.fillStyle=color; ctx.font=`600 ${u.font}px 'Pretendard','Apple SD Gothic Neo',sans-serif`;
   const tw=ctx.measureText(label).width;
   ctx.fillRect(4,line.ly-u.font-6,tw+12,u.font+8);
   ctx.fillStyle='#fff'; ctx.fillText(label,10,line.ly-7);
@@ -659,7 +659,7 @@ function drawAnalysis(u){
       const by=yAt(S.baseline,cx), selL=(i===S.selLane);
       ctx.beginPath(); ctx.arc(cx,by+u.r*1.6,u.r*0.8,0,7);
       ctx.fillStyle='#fff'; ctx.fill(); ctx.lineWidth=u.lw*(selL?1.6:1); ctx.strokeStyle=selL?'#1a6bb5':'#888'; ctx.stroke();
-      ctx.fillStyle=selL?'#1a6bb5':'#555'; ctx.font=`600 ${u.font*0.75}px var(--fm,monospace)`;
+      ctx.fillStyle=selL?'#1a6bb5':'#555'; ctx.font=`600 ${u.font*0.75}px 'JetBrains Mono','Fira Code',monospace`;
       ctx.textAlign='center'; ctx.fillText(String(i+1),cx,by+u.r*1.95); ctx.textAlign='left';
       // 선택된 레인: 삭제(✕) 배지 — 모바일(터치)에서만
       if(selL && touchUI()){
@@ -683,7 +683,7 @@ function drawAnalysis(u){
     if(seld){ ctx.lineWidth=u.lw; ctx.strokeStyle=col; ctx.beginPath(); ctx.arc(cx,sp.y,u.r*1.5,0,7); ctx.stroke(); }
     // Rf 라벨 (크기 조절: S.labelScale)
     const rf=rfOf(sp).toFixed(2), lf=u.font*0.82*S.labelScale;
-    ctx.font=`600 ${lf}px var(--fm,monospace)`;
+    ctx.font=`600 ${lf}px 'JetBrains Mono','Fira Code',monospace`;
     const tw=ctx.measureText(rf).width;
     ctx.fillStyle=col; ctx.fillRect(cx+u.r+2,sp.y-lf*0.72,tw+lf*0.6,lf*1.45);
     ctx.fillStyle='#fff'; ctx.fillText(rf,cx+u.r+lf*0.4,sp.y+lf*0.4);
