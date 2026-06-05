@@ -659,18 +659,43 @@ function drawSeg(line,color,label,u){
     ctx.fillStyle=color; ctx.beginPath(); ctx.arc(hx,hy,u.r*0.42,0,7); ctx.fill();
   });
 }
-/* Rf 라벨 그리기: 기본은 spot 오른쪽, 오른쪽이 잘리면 왼쪽으로, 그래도 안되면 중앙 클램프.
-   세로도 화면 안으로 클램프. (g=context, cx/sy=spot 중심, sr=spot 반경, lf=폰트크기, W/H=캔버스) */
-function drawRfLabel(g, cx, sy, sr, lf, text, col, W, H){
-  g.font=`600 ${lf}px 'JetBrains Mono','Fira Code',monospace`;
-  const tw=g.measureText(text).width, bw=tw+lf*0.6, bh=lf*1.45, pad=2;
-  let bx=cx+sr+pad;                                  // 기본: 오른쪽
-  if(bx+bw > W-1) bx=cx-sr-pad-bw;                   // 오른쪽 잘림 → 왼쪽
-  if(bx < 1) bx=Math.max(1, Math.min(W-bw-1, cx-bw/2)); // 양쪽 다 안되면 중앙 클램프
-  let by=Math.max(1, Math.min(H-bh-1, sy-bh*0.5));   // 세로 중앙 + 위/아래 클램프
-  g.fillStyle=col; g.fillRect(bx,by,bw,bh);
-  g.fillStyle='#fff'; g.textAlign='left'; g.textBaseline='middle';
-  g.fillText(text, bx+lf*0.3, by+bh*0.52);
+/* Rf 라벨 일괄 배치: 기본 spot 오른쪽(잘리면 왼쪽/중앙 클램프) → 서로 겹치면 아래로 밀어
+   해소 → 멀어진 라벨은 spot과 연결선. specs=[{cx,sy,sr,lf,text,col}] */
+function drawRfLabels(g, specs, W, H){
+  const FONT=lf=>`600 ${lf}px 'JetBrains Mono','Fira Code',monospace`;
+  // 1) 초기 위치
+  specs.forEach(s=>{
+    g.font=FONT(s.lf);
+    s.bw=g.measureText(s.text).width + s.lf*0.6; s.bh=s.lf*1.45;
+    let bx=s.cx+s.sr+2;
+    if(bx+s.bw > W-1) bx=s.cx-s.sr-2-s.bw;                 // 오른쪽 잘림 → 왼쪽
+    if(bx < 1) bx=Math.max(1, Math.min(W-s.bw-1, s.cx-s.bw/2));
+    s.bx=bx; s.by=Math.max(1, Math.min(H-s.bh-1, s.sy-s.bh*0.5));
+  });
+  // 2) 겹침 해소 (위→아래 순, 겹치면 아래로)
+  const placed=[], order=[...specs].sort((a,b)=> a.by-b.by || a.bx-b.bx);
+  const hit=(a,b)=> a.bx<b.bx+b.bw && a.bx+a.bw>b.bx && a.by<b.by+b.bh && a.by+a.bh>b.by;
+  order.forEach(s=>{
+    let guard=0;
+    for(let again=true; again && guard<400; guard++){
+      again=false;
+      for(const p of placed){ if(hit(s,p)){ s.by=p.by+p.bh+2; again=true; } }
+      if(s.by+s.bh > H-1){ s.by=Math.max(1, H-1-s.bh); break; }
+    }
+    placed.push(s);
+  });
+  // 3) 그리기: 연결선(밀려난 경우) → 박스 → 글자
+  g.textAlign='left'; g.textBaseline='middle';
+  order.forEach(s=>{
+    const lcy=s.by+s.bh/2;
+    if(Math.abs(lcy-s.sy) > s.bh*0.55){
+      g.strokeStyle=s.col; g.lineWidth=Math.max(1.4, s.lf*0.07);
+      const tx=(s.bx > s.cx) ? s.bx : s.bx+s.bw;
+      g.beginPath(); g.moveTo(s.cx,s.sy); g.lineTo(tx,lcy); g.stroke();
+    }
+    g.fillStyle=s.col; g.fillRect(s.bx,s.by,s.bw,s.bh);
+    g.font=FONT(s.lf); g.fillStyle='#fff'; g.fillText(s.text, s.bx+s.lf*0.3, s.by+s.bh*0.52);
+  });
   g.textBaseline='alphabetic';
 }
 function drawAnalysis(u){
@@ -700,7 +725,8 @@ function drawAnalysis(u){
       }
     });
   }
-  // spots (자유 위치 sp.x, sp.y)
+  // spots (자유 위치 sp.x, sp.y) — 원/배지 먼저, 라벨은 겹침 해소 후 위에
+  const specs=[];
   S.spots.forEach((sp,idx)=>{
     const cx=sp.x;
     const col=SPOT_COLORS[sp.lane%SPOT_COLORS.length];
@@ -709,8 +735,7 @@ function drawAnalysis(u){
     ctx.fillStyle=col+'cc'; ctx.fill();
     ctx.lineWidth=u.lw*(seld?1.6:1); ctx.strokeStyle=seld?'#fff':'#ffffffaa'; ctx.stroke();
     if(seld){ ctx.lineWidth=u.lw; ctx.strokeStyle=col; ctx.beginPath(); ctx.arc(cx,sp.y,u.r*1.5,0,7); ctx.stroke(); }
-    // Rf 라벨 (크기 조절 + 가장자리 짤림 방지 자동 배치)
-    drawRfLabel(ctx, cx, sp.y, u.r, u.font*0.82*S.labelScale, rfOf(sp).toFixed(2), col, view.w, view.h);
+    specs.push({cx, sy:sp.y, sr:u.r, lf:u.font*0.82*S.labelScale, text:rfOf(sp).toFixed(2), col});
     // 선택된 spot: 삭제(✕) 배지 — 모바일(터치)에서만 표시
     if(seld && touchUI()){
       const b=spotBadge(sp,u);
@@ -721,6 +746,7 @@ function drawAnalysis(u){
       ctx.moveTo(b.x+k,b.y-k); ctx.lineTo(b.x-k,b.y+k); ctx.stroke();
     }
   });
+  drawRfLabels(ctx, specs, view.w, view.h);
 }
 
 /* ════════════ 포인터 상호작용 ════════════ */
@@ -1060,12 +1086,14 @@ function drawOnto(x,u){
     x.fillStyle='#fff'; x.fillText(label,10,line.ly-7);
   };
   seg(S.front,'#BA7517','solvent front'); seg(S.baseline,'#1a6bb5','baseline');
+  const specs=[];
   S.spots.forEach(sp=>{
     const cx=sp.x, col=SPOT_COLORS[sp.lane%SPOT_COLORS.length];
     x.beginPath(); x.arc(cx,sp.y,u.r*0.95,0,7); x.fillStyle=col+'cc'; x.fill();
     x.lineWidth=u.lw; x.strokeStyle='#fff'; x.stroke();
-    drawRfLabel(x, cx, sp.y, u.r, u.font*0.82*S.labelScale, rfOf(sp).toFixed(2), col, S.rect.w, S.rect.h);
+    specs.push({cx, sy:sp.y, sr:u.r, lf:u.font*0.82*S.labelScale, text:rfOf(sp).toFixed(2), col});
   });
+  drawRfLabels(x, specs, S.rect.w, S.rect.h);
 }
 function triggerDownload(blob,name){
   const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=name;
