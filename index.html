@@ -1006,9 +1006,10 @@ const PANEL = {
         <button class="btn btn-sm btn-p" id="bCopy">📋 표 복사</button>
         <button class="btn btn-sm" id="bCsv">⬇ CSV</button>
         <button class="btn btn-sm" id="bPng">🖼️ 주석 이미지</button>
+        <button class="btn btn-sm" id="bOrig">🖼️ 원본 이미지</button>
       </div>
     </div>
-    <div class="phelp muted">‘표 복사’는 ELN/엑셀에 바로 붙여넣을 수 있는 형식(TSV)입니다.</div>`;
+    <div class="phelp muted">‘표 복사’는 ELN/엑셀에 바로 붙여넣을 수 있는 형식(TSV)입니다. ‘원본 이미지’는 마커 없는 보정 플레이트입니다.</div>`;
   }
 };
 function esc(s){ return String(s).replace(/"/g,'&quot;').replace(/</g,'&lt;'); }
@@ -1038,7 +1039,7 @@ function bindPanel(){
       S.spots=S.spots.filter(s=>s.lane!==li); S.sel=null; S.selLane=null; refreshPanel(); render(); } });
   // step5
   on('rLblSize','input',e=>{ S.labelScale=+e.target.value; const v=$('#vLblSize'); if(v) v.textContent=Math.round(S.labelScale*100)+'%'; render(); });
-  on('bCopy','click',copyTable); on('bCsv','click',downloadCSV); on('bPng','click',downloadPNG);
+  on('bCopy','click',copyTable); on('bCsv','click',downloadCSV); on('bPng','click',downloadPNG); on('bOrig','click',downloadOriginal);
   document.querySelectorAll('.lbl').forEach(inp=>inp.addEventListener('input',e=>{ S.laneLabels[+e.target.dataset.lane]=e.target.value; }));
 }
 
@@ -1076,6 +1077,13 @@ function downloadPNG(){
   drawOnto(x,u);
   view=prevView;
   c.toBlob(b=>{ triggerDownload(b,'tlc-rf.png'); toast('주석 이미지 저장'); });
+}
+function downloadOriginal(){
+  // 마커 없는 보정 플레이트(원본 TLC) 저장
+  if(!S.rect){ toast('보정된 이미지가 없습니다'); return; }
+  const r=S.rect, c=document.createElement('canvas'); c.width=r.w; c.height=r.h;
+  c.getContext('2d').drawImage(r.canvas,0,0);
+  c.toBlob(b=>{ triggerDownload(b,'tlc-original.png'); toast('원본 이미지 저장'); });
 }
 function drawOnto(x,u){
   const seg=(line,color,label)=>{
