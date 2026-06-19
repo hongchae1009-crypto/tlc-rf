@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="ko"><head><meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>IA — TLC Rf 계산기</title>
+<style>
+:root{--bg:#fff;--bg2:#f7f8fa;--bg3:#eef0f4;--tx:#1a1c21;--tx2:#4a5060;--tx3:#9099aa;--bd:#e2e4e9;--bd2:#d0d4dc;
+--blue:#1a6bb5;--blue-bg:#e8f0fa;--blue-bd:#b5d4f4;--green:#1D9E75;--org:#BA7517;
+--f:'Pretendard','Apple SD Gothic Neo',-apple-system,sans-serif;--fm:'JetBrains Mono','Fira Code',monospace;}
+*{box-sizing:border-box;margin:0;padding:0;}
+body{font-family:var(--f);color:var(--tx);background:var(--bg3);line-height:1.65;-webkit-font-smoothing:antialiased;}
+.wrap{max-width:860px;margin:0 auto;padding:28px 22px 80px;}
+.docnav{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:18px;font-size:13px;}
+.docnav a{text-decoration:none;color:var(--tx2);background:var(--bg);border:1px solid var(--bd2);border-radius:8px;padding:6px 12px;}
+.docnav a.on{background:var(--blue);color:#fff;border-color:var(--blue);}
+.docnav a:hover{background:var(--bg2);}
+.card{background:var(--bg);border:1px solid var(--bd);border-radius:14px;padding:26px 30px;box-shadow:0 1px 3px rgba(20,30,50,.05);}
+h1{font-size:25px;font-weight:700;letter-spacing:-.5px;}
+.meta{font-size:12.5px;color:var(--tx3);margin:6px 0 22px;font-family:var(--fm);}
+h2{font-size:18px;font-weight:700;margin:26px 0 10px;padding-top:18px;border-top:1px solid var(--bd);color:var(--blue);}
+h2:first-of-type{border-top:0;padding-top:0;}
+p,li{font-size:14px;color:var(--tx2);}
+ul,ol{margin:6px 0 10px 22px;}li{margin-bottom:3px;}b{color:var(--tx);}
+table{width:100%;border-collapse:collapse;margin:10px 0;font-size:13px;}
+th,td{border:1px solid var(--bd);padding:7px 10px;text-align:left;vertical-align:top;}
+th{background:var(--bg2);font-weight:600;color:var(--tx);}
+td:first-child{font-weight:600;color:var(--blue);white-space:nowrap;}
+pre{background:#1a1c21;color:#e8eaf0;border-radius:10px;padding:16px 18px;overflow-x:auto;font-family:var(--fm);font-size:12.5px;line-height:1.55;margin:12px 0;}
+code{font-family:var(--fm);font-size:12.5px;background:var(--bg3);border-radius:5px;padding:1px 6px;}
+.foot{margin-top:24px;font-size:13px;color:var(--tx3);}
+@media(max-width:560px){.card{padding:20px 16px;}}
+</style></head><body><div class="wrap">
+<div class="docnav"><a href="index.html">📚 문서 허브</a><a href="PRD.html">PRD</a><a class="on" href="IA.html">IA</a><a href="ERD.html">ERD</a><a href="../index.html">▶ 앱 열기</a></div>
+<div class="card">
+<h1>IA — TLC Rf 계산기</h1>
+<div class="meta">Information Architecture · v1.0 · 2026-06-19</div>
+
+<h2>1. 구조 개요</h2>
+<p>단일 페이지(SPA) · <b>5단계 마법사 + 모달</b>. 라우팅 없음. 상태(<code>S.step</code>)로 화면 전환.</p>
+<pre>TLC Rf 계산기 (단일 페이지)
+├─ 상단바(Topbar)    — 로고 · ⚡전자동 분석 · 새 이미지 · ❓도움말
+├─ 스텝퍼(Stepper)   — ① 불러오기 → ② 보정 → ③ 기준선 → ④ Spot → ⑤ 결과
+├─ 본문(Main)
+│   ├─ 무대(Stage)   — 드롭존 또는 캔버스(오버레이) · [모바일] 줌 컨트롤
+│   └─ 패널(Panel)   — 단계별 안내·컨트롤 + 하단 이전/다음
+└─ 모달/오버레이      — 도움말 · 토스트</pre>
+
+<h2>2. 네비게이션</h2>
+<ul>
+<li><b>선형 진행</b>: 패널 하단 <code>이전 / 다음</code>. 스텝퍼 라벨 클릭 이동(보정 후 3~5단계 접근).</li>
+<li><b>점프</b>: <code>⚡ 전자동</code> → 일괄 처리 후 ⑤ 결과로 이동.</li>
+<li><b>리셋</b>: <code>새 이미지</code> → ①로 초기화.</li>
+</ul>
+
+<h2>3. 화면별 구성</h2>
+<table>
+<tr><th>단계</th><th>무대(Stage)</th><th>패널(Panel) 컨트롤</th></tr>
+<tr><td>① 불러오기</td><td>드롭존(클릭/드래그/Ctrl+V)</td><td>입력 방식 안내</td></tr>
+<tr><td>② 보정</td><td>캔버스 + 코너 4핸들 + 돋보기</td><td>회전 ↺↻ · 플레이트 자동 인식 · 전체(보정 생략)</td></tr>
+<tr><td>③ 기준선</td><td>캔버스 + baseline·용매front 선분</td><td>자동 제안 · 평행 이동 슬라이더</td></tr>
+<tr><td>④ Spot</td><td>캔버스 + spot 마커·레인 핸들</td><td>감도 · 다시 검출 · 선택/모두 삭제 · 레인 ±</td></tr>
+<tr><td>⑤ 결과</td><td>캔버스 + 마커·Rf 라벨(겹침 회피)</td><td>Rf 표 · RF 글씨 크기 · 내보내기 4종</td></tr>
+</table>
+
+<h2>4. 사용자 플로우</h2>
+<pre>[사진 준비]
+   │ 파일/드래그/붙여넣기
+   ▼
+① 불러오기 ─▶ ② 보정(코너·회전·자동인식) ─▶ ③ 기준선(원점·용매front)
+                                                  │
+                                                  ▼
+                         ④ Spot(자동검출→감도/수동→레인 정리)
+                                                  │
+                                                  ▼
+                         ⑤ 결과(Rf 표) ─▶ 내보내기(복사/CSV/PNG)
+   └──────────── ⚡ 전자동(①후 한 번에 ⑤로) ────────────┘</pre>
+
+<h2>5. 상태 전이</h2>
+<ul>
+<li><code>goStep(n)</code>이 단계 전환. ②→③ 시 <code>buildRect()</code>(워프)·<code>autoLines()</code>, ③→④ 시 미검출이면 <code>detectSpots()</code>.</li>
+<li>뷰 이미지: ②=작업(work), ③~⑤=보정(rect).</li>
+<li>⑤에서 캔버스 <b>0.5초 길게 누름</b> → 마커 없는 원본 미리보기(떼면 복귀).</li>
+</ul>
+
+<h2>6. 컴포넌트 인벤토리</h2>
+<ul>
+<li><b>입력</b>: 파일 input(hidden), 드래그앤드롭, <code>paste</code>.</li>
+<li><b>오버레이 핸들</b>: 코너(4), 기준선 끝점(좌/우×2선), spot 마커, 레인 핸들, 삭제 ✕ 배지(모바일), 돋보기.</li>
+<li><b>컨트롤</b>: 버튼, 슬라이더(감도·라벨크기·평행이동), 줌(±/fit), 토스트.</li>
+<li><b>모달</b>: 도움말.</li>
+</ul>
+
+<h2>7. 반응형</h2>
+<ul>
+<li>≥681px: 좌(무대) + 우(패널 300~340px) 2열.</li>
+<li>≤680px: 1열 세로 스택. 캔버스 고정 크기 + transform 줌/팬, 이전/다음 하단 고정.</li>
+</ul>
+
+<div class="foot">관련 문서: <a href="PRD.html">PRD</a> · <a href="ERD.html">ERD</a></div>
+</div></div></body></html>

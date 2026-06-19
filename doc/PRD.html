@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="ko"><head><meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>PRD — TLC Rf 계산기</title>
+<style>
+:root{--bg:#fff;--bg2:#f7f8fa;--bg3:#eef0f4;--tx:#1a1c21;--tx2:#4a5060;--tx3:#9099aa;--bd:#e2e4e9;--bd2:#d0d4dc;
+--blue:#1a6bb5;--blue-bg:#e8f0fa;--blue-bd:#b5d4f4;--green:#1D9E75;--org:#BA7517;
+--f:'Pretendard','Apple SD Gothic Neo',-apple-system,sans-serif;--fm:'JetBrains Mono','Fira Code',monospace;}
+*{box-sizing:border-box;margin:0;padding:0;}
+body{font-family:var(--f);color:var(--tx);background:var(--bg3);line-height:1.65;-webkit-font-smoothing:antialiased;}
+.wrap{max-width:860px;margin:0 auto;padding:28px 22px 80px;}
+.docnav{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:18px;font-size:13px;}
+.docnav a{text-decoration:none;color:var(--tx2);background:var(--bg);border:1px solid var(--bd2);border-radius:8px;padding:6px 12px;}
+.docnav a.on{background:var(--blue);color:#fff;border-color:var(--blue);}
+.docnav a:hover{background:var(--bg2);}
+.card{background:var(--bg);border:1px solid var(--bd);border-radius:14px;padding:26px 30px;box-shadow:0 1px 3px rgba(20,30,50,.05);}
+h1{font-size:25px;font-weight:700;letter-spacing:-.5px;}
+.meta{font-size:12.5px;color:var(--tx3);margin:6px 0 22px;font-family:var(--fm);}
+.meta a{color:var(--blue);}
+h2{font-size:18px;font-weight:700;margin:26px 0 10px;padding-top:18px;border-top:1px solid var(--bd);color:var(--blue);}
+h2:first-of-type{border-top:0;padding-top:0;}
+h3{font-size:15px;font-weight:600;margin:16px 0 6px;}
+p,li{font-size:14px;color:var(--tx2);}
+ul,ol{margin:6px 0 10px 22px;}li{margin-bottom:3px;}b{color:var(--tx);}
+table{width:100%;border-collapse:collapse;margin:10px 0;font-size:13px;}
+th,td{border:1px solid var(--bd);padding:7px 10px;text-align:left;vertical-align:top;}
+th{background:var(--bg2);font-weight:600;color:var(--tx);}
+td:first-child{font-family:var(--fm);color:var(--blue);white-space:nowrap;}
+code{font-family:var(--fm);font-size:12.5px;background:var(--bg3);border-radius:5px;padding:1px 6px;}
+.tag{display:inline-block;font-size:11px;font-weight:600;padding:2px 9px;border-radius:8px;background:var(--blue-bg);color:var(--blue);border:1px solid var(--blue-bd);}
+.foot{margin-top:24px;font-size:13px;color:var(--tx3);}
+@media(max-width:560px){.card{padding:20px 16px;}}
+</style></head><body><div class="wrap">
+<div class="docnav"><a href="index.html">📚 문서 허브</a><a class="on" href="PRD.html">PRD</a><a href="IA.html">IA</a><a href="ERD.html">ERD</a><a href="../index.html">▶ 앱 열기</a></div>
+<div class="card">
+<h1>PRD — TLC Rf 계산기</h1>
+<div class="meta">Product Requirements Document · v1.0 · 2026-06-19 · <a href="https://hongchae1009-crypto.github.io/tlc-rf/">라이브</a> · <a href="https://github.com/hongchae1009-crypto/tlc-rf">저장소</a></div>
+
+<h2>1. 개요</h2>
+<p>TLC(박층 크로마토그래피) 플레이트 사진을 업로드하면 baseline(원점)·전개용매선·각 spot 위치를 잡아 <b>Rf 값을 자동 계산</b>해 주는 단일 파일 웹 도구. 순수 JavaScript로 작성되어 외부 의존성 없이 <b>완전 오프라인</b>으로 동작한다(<code>index.html</code> 하나).</p>
+
+<h2>2. 배경 / 문제</h2>
+<ul>
+<li>TLC 결과를 손으로 자를 대어 Rf를 계산하는 일이 번거롭고 재현성이 낮다.</li>
+<li>사진이 카메라 각도로 기울어지거나(평행사변형) 배경이 함께 찍힌다.</li>
+<li>UV254 형광, 발색(stain) 등 플레이트 종류가 다양해 일괄 처리가 어렵다.</li>
+</ul>
+
+<h2>3. 목표 / 비목표</h2>
+<h3>목표</h3>
+<ul>
+<li>사진 1장 → Rf 표를 5단계 마법사로 빠르게 산출.</li>
+<li>기울어진 사진 원근 보정, spot 자동 검출(+수동 보정), 결과 내보내기.</li>
+<li>설치 없이 PC·모바일에서 사용. 사진은 기기 밖으로 나가지 않음.</li>
+</ul>
+<h3>비목표</h3>
+<ul><li>계정/서버/DB, 영구 저장, 다중 사용자 협업. 정량(농도) 분석.</li></ul>
+
+<h2>4. 사용자</h2>
+<p>1차: 유기/천연물 화학 연구자·대학원생. 사용 맥락: 실험 직후 TLC 결과를 ELN/보고서에 기록.</p>
+
+<h2>5. 기능 요구사항</h2>
+<table>
+<tr><th>ID</th><th>기능</th><th>설명</th></tr>
+<tr><td>F1</td><td>이미지 불러오기</td><td>파일·드래그&드롭·클립보드(Ctrl+V). 원본/잘린 이미지 모두</td></tr>
+<tr><td>F2</td><td>원근 보정</td><td>네 모서리 드래그 → 호모그래피 워프로 직사각형화. 코너 돋보기</td></tr>
+<tr><td>F3</td><td>플레이트 자동 인식</td><td>형광녹색/배경대비/밝기 기반 코너 자동 추정(색 무관)</td></tr>
+<tr><td>F4</td><td>이미지 회전</td><td>가로 사진 90°(↺/↻)</td></tr>
+<tr><td>F5</td><td>기준선 지정</td><td>baseline·용매front 선분. 가운데=평행, 양끝=기울기(보간 Rf)</td></tr>
+<tr><td>F6</td><td>Spot 자동 검출</td><td>배경색 대비 2D blob + 감도 슬라이더, 레인 자동 클러스터링</td></tr>
+<tr><td>F7</td><td>Spot 수동 편집</td><td>탭=추가, 드래그=이동, 삭제(PC 우클릭·Delete / 모바일 탭→✕)</td></tr>
+<tr><td>F8</td><td>레인 관리</td><td>핸들 이동·추가·삭제, 레인 라벨 입력</td></tr>
+<tr><td>F9</td><td>Rf 계산·결과표</td><td>Rf=(원점→spot)/(원점→용매front). 레인·spot별 표, 라벨 크기 조절</td></tr>
+<tr><td>F10</td><td>내보내기</td><td>표 복사(TSV)·CSV·주석 PNG·원본 PNG</td></tr>
+<tr><td>F11</td><td>전자동 모드</td><td>⚡ 일괄 처리 후 결과로 이동(검토·수정 가능)</td></tr>
+<tr><td>F12</td><td>되돌리기</td><td>Ctrl+Z</td></tr>
+<tr><td>F13</td><td>모바일 대응</td><td>세로 스택, 줌(버튼/핀치/팬), 터치 편집, 길게눌러 원본</td></tr>
+<tr><td>F14</td><td>도움말</td><td>❓ 도움말 모달, 첫 방문 1회 자동</td></tr>
+</table>
+
+<h2>6. 비기능 요구사항</h2>
+<ul>
+<li><b>오프라인·단일 파일</b>: CDN/외부 폰트·스크립트 없음. 더블클릭 동작.</li>
+<li><b>프라이버시</b>: 이미지 전송 없음(브라우저 내 처리).</li>
+<li><b>성능</b>: 워프 ≤1000px, 작업 이미지 ≤1200px 다운스케일.</li>
+<li><b>호환성</b>: 최신 Chrome/Safari/Edge(PC·모바일). Pointer Events·Canvas2D.</li>
+</ul>
+
+<h2>7. 성공 기준</h2>
+<ul>
+<li>기울어진 실제 UV/stain 사진의 코너 보정 후 직사각형화 성공.</li>
+<li>자동 검출이 spot 다수를 잡고, 감도/수동으로 100% 교정 가능.</li>
+<li>같은 화합물이 여러 레인에서 유사 Rf(±0.03).</li>
+<li>내보내기가 기울어진 선분·spot 좌표 기준으로 정확.</li>
+</ul>
+
+<h2>8. 기술 스택</h2>
+<ul>
+<li>HTML5 + Canvas2D + 바닐라 JS(ES2020), 빌드 없음.</li>
+<li>영상처리 자체 구현: 호모그래피(8×8 가우스 소거 + bilinear), 박스 블러, 연결요소 blob, 중앙값 배경 추정, 1D 레인 클러스터링.</li>
+<li>배포: GitHub Pages(main 루트), <code>git push</code> 자동 재배포.</li>
+</ul>
+
+<h2>9. 로드맵</h2>
+<ul>
+<li>보정 전 원본 사진 내보내기 옵션, 멀티 플레이트 일괄 처리.</li>
+<li>검출 임계 프리셋(UV/stain), 레퍼런스 Rf 비교, PDF/ELN 연동.</li>
+</ul>
+
+<div class="foot">관련 문서: <a href="IA.html">IA</a> · <a href="ERD.html">ERD</a></div>
+</div></div></body></html>

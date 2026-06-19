@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="ko"><head><meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>문서 — TLC Rf 계산기</title>
+<style>
+:root{--bg:#fff;--bg2:#f7f8fa;--bg3:#eef0f4;--tx:#1a1c21;--tx2:#4a5060;--tx3:#9099aa;--bd:#e2e4e9;--bd2:#d0d4dc;
+--blue:#1a6bb5;--blue-bg:#e8f0fa;--blue-bd:#b5d4f4;
+--f:'Pretendard','Apple SD Gothic Neo',-apple-system,sans-serif;--fm:'JetBrains Mono','Fira Code',monospace;}
+*{box-sizing:border-box;margin:0;padding:0;}
+body{font-family:var(--f);color:var(--tx);background:var(--bg3);line-height:1.6;min-height:100vh;-webkit-font-smoothing:antialiased;}
+.wrap{max-width:720px;margin:0 auto;padding:48px 22px 80px;}
+h1{font-size:27px;font-weight:700;color:var(--blue);letter-spacing:-.5px;}
+.sub{font-size:14px;color:var(--tx3);margin:8px 0 28px;}
+.links{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:26px;font-size:13px;}
+.links a{text-decoration:none;color:#fff;background:var(--blue);border-radius:9px;padding:9px 16px;font-weight:600;}
+.links a.ghost{background:var(--bg);color:var(--tx2);border:1px solid var(--bd2);}
+.links a:hover{filter:brightness(.96);}
+.grid{display:grid;gap:14px;}
+.doc{display:block;text-decoration:none;background:var(--bg);border:1px solid var(--bd);border-radius:14px;padding:20px 22px;box-shadow:0 1px 3px rgba(20,30,50,.05);transition:.12s;}
+.doc:hover{border-color:var(--blue-bd);background:var(--blue-bg);}
+.doc .t{font-size:17px;font-weight:700;color:var(--tx);display:flex;align-items:center;gap:9px;}
+.doc .tag{font-size:11px;font-family:var(--fm);background:var(--bg3);color:var(--tx3);border-radius:6px;padding:2px 7px;}
+.doc .d{font-size:13.5px;color:var(--tx2);margin-top:6px;}
+.doc .md{font-size:12px;color:var(--blue);margin-top:8px;font-family:var(--fm);}
+.foot{margin-top:30px;font-size:12.5px;color:var(--tx3);font-family:var(--fm);}
+</style></head><body><div class="wrap">
+<h1>TLC Rf 계산기 — 문서</h1>
+<div class="sub">제품 요구사항 · 정보구조 · 데이터 모델</div>
+<div class="links">
+  <a href="../index.html">▶ 앱 열기</a>
+  <a class="ghost" href="https://hongchae1009-crypto.github.io/tlc-rf/">🌐 라이브 사이트</a>
+  <a class="ghost" href="https://github.com/hongchae1009-crypto/tlc-rf">💻 GitHub</a>
+</div>
+<div class="grid">
+  <a class="doc" href="PRD.html">
+    <div class="t">📄 PRD <span class="tag">Product Requirements</span></div>
+    <div class="d">제품 개요·배경·목표·기능 요구사항(F1~F14)·비기능 요구사항·기술 스택·로드맵.</div>
+    <div class="md">PRD.html · PRD.md</div>
+  </a>
+  <a class="doc" href="IA.html">
+    <div class="t">🗺️ IA <span class="tag">Information Architecture</span></div>
+    <div class="d">화면 구조·네비게이션·단계별 구성·사용자 플로우·상태 전이·컴포넌트·반응형.</div>
+    <div class="md">IA.html · IA.md</div>
+  </a>
+  <a class="doc" href="ERD.html">
+    <div class="t">🧩 ERD <span class="tag">Data Model</span></div>
+    <div class="d">인메모리 상태(S) 엔티티·속성·관계·Rf 파생 계산·생명주기. (DB 없음)</div>
+    <div class="md">ERD.html · ERD.md</div>
+  </a>
+</div>
+<div class="foot">v1.0 · 2026-06-19 · 단일 파일 오프라인 웹 도구</div>
+</div></body></html>

@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="ko"><head><meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>ERD — TLC Rf 계산기</title>
+<style>
+:root{--bg:#fff;--bg2:#f7f8fa;--bg3:#eef0f4;--tx:#1a1c21;--tx2:#4a5060;--tx3:#9099aa;--bd:#e2e4e9;--bd2:#d0d4dc;
+--blue:#1a6bb5;--blue-bg:#e8f0fa;--blue-bd:#b5d4f4;--green:#1D9E75;--green-bg:#eaf3de;--org:#BA7517;--org-bg:#faeeda;
+--f:'Pretendard','Apple SD Gothic Neo',-apple-system,sans-serif;--fm:'JetBrains Mono','Fira Code',monospace;}
+*{box-sizing:border-box;margin:0;padding:0;}
+body{font-family:var(--f);color:var(--tx);background:var(--bg3);line-height:1.65;-webkit-font-smoothing:antialiased;}
+.wrap{max-width:920px;margin:0 auto;padding:28px 22px 80px;}
+.docnav{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:18px;font-size:13px;}
+.docnav a{text-decoration:none;color:var(--tx2);background:var(--bg);border:1px solid var(--bd2);border-radius:8px;padding:6px 12px;}
+.docnav a.on{background:var(--blue);color:#fff;border-color:var(--blue);}
+.docnav a:hover{background:var(--bg2);}
+.card{background:var(--bg);border:1px solid var(--bd);border-radius:14px;padding:26px 30px;box-shadow:0 1px 3px rgba(20,30,50,.05);}
+h1{font-size:25px;font-weight:700;letter-spacing:-.5px;}
+.meta{font-size:12.5px;color:var(--tx3);margin:6px 0 18px;font-family:var(--fm);}
+h2{font-size:18px;font-weight:700;margin:26px 0 12px;padding-top:18px;border-top:1px solid var(--bd);color:var(--blue);}
+h2:first-of-type{border-top:0;padding-top:0;}
+p,li{font-size:14px;color:var(--tx2);}ul{margin:6px 0 10px 22px;}li{margin-bottom:3px;}b{color:var(--tx);}
+code{font-family:var(--fm);font-size:12.5px;background:var(--bg3);border-radius:5px;padding:1px 6px;}
+.note{background:var(--org-bg);border:1px solid #EF9F27;border-radius:9px;padding:11px 14px;font-size:13px;color:#8a5a12;margin-bottom:6px;}
+/* 엔티티 그리드 */
+.ents{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:14px;margin:6px 0;}
+.ent{border:1px solid var(--bd2);border-radius:11px;overflow:hidden;background:var(--bg);}
+.ent>.h{background:var(--blue);color:#fff;font-weight:700;font-size:13.5px;padding:8px 12px;font-family:var(--fm);}
+.ent.root>.h{background:#23262d;}
+.ent.derived>.h{background:var(--green);}
+.ent .row{display:flex;justify-content:space-between;gap:8px;padding:5px 12px;border-top:1px solid var(--bd);font-size:12px;}
+.ent .row .k{font-family:var(--fm);color:var(--tx);}
+.ent .row .t{color:var(--tx3);font-family:var(--fm);}
+.ent .row.fk .k::after{content:" 🔑";font-size:10px;}
+.ent .row.pk{background:var(--blue-bg);}
+table{width:100%;border-collapse:collapse;margin:10px 0;font-size:13px;}
+th,td{border:1px solid var(--bd);padding:7px 10px;text-align:left;vertical-align:top;}
+th{background:var(--bg2);font-weight:600;color:var(--tx);}
+td:first-child{font-weight:600;color:var(--blue);white-space:nowrap;}
+pre{background:#1a1c21;color:#e8eaf0;border-radius:10px;padding:16px 18px;overflow-x:auto;font-family:var(--fm);font-size:12.5px;line-height:1.6;margin:12px 0;}
+.rel{font-family:var(--fm);font-size:12.5px;background:var(--bg2);border:1px solid var(--bd);border-radius:8px;padding:10px 14px;margin:4px 0;color:var(--tx2);}
+.rel b{color:var(--blue);}
+.foot{margin-top:24px;font-size:13px;color:var(--tx3);}
+@media(max-width:560px){.card{padding:20px 16px;}}
+</style></head><body><div class="wrap">
+<div class="docnav"><a href="index.html">📚 문서 허브</a><a href="PRD.html">PRD</a><a href="IA.html">IA</a><a class="on" href="ERD.html">ERD</a><a href="../index.html">▶ 앱 열기</a></div>
+<div class="card">
+<h1>ERD — TLC Rf 계산기 (데이터 모델)</h1>
+<div class="meta">Entity Relationship / Data Model · v1.0 · 2026-06-19</div>
+<div class="note">⚠️ 이 앱은 <b>데이터베이스가 없습니다.</b> 모든 데이터는 브라우저 메모리의 전역 상태 객체 <code>S</code>에 존재하며 새로고침 시 사라집니다. 아래는 그 <b>인메모리 데이터 모델</b>입니다.</div>
+
+<h2>1. 엔티티</h2>
+<div class="ents">
+  <div class="ent root"><div class="h">AppState (S)</div>
+    <div class="row"><span class="k">step</span><span class="t">int 1..5</span></div>
+    <div class="row"><span class="k">sens</span><span class="t">float</span></div>
+    <div class="row"><span class="k">labelScale</span><span class="t">float</span></div>
+    <div class="row"><span class="k">zoom/panX/panY</span><span class="t">float</span></div>
+    <div class="row"><span class="k">peek</span><span class="t">bool</span></div>
+    <div class="row"><span class="k">sel / selLane</span><span class="t">int?</span></div>
+  </div>
+  <div class="ent"><div class="h">WorkImage</div>
+    <div class="row"><span class="k">canvas</span><span class="t">canvas</span></div>
+    <div class="row"><span class="k">w / h</span><span class="t">int ≤1200</span></div>
+  </div>
+  <div class="ent"><div class="h">RectImage</div>
+    <div class="row"><span class="k">canvas</span><span class="t">canvas</span></div>
+    <div class="row"><span class="k">w / h</span><span class="t">int ≤1000</span></div>
+  </div>
+  <div class="ent"><div class="h">Corner ×4</div>
+    <div class="row"><span class="k">x / y</span><span class="t">float(work)</span></div>
+    <div class="row"><span class="k">role</span><span class="t">TL/TR/BR/BL</span></div>
+  </div>
+  <div class="ent"><div class="h">Baseline</div>
+    <div class="row"><span class="k">lx / ly</span><span class="t">float(rect)</span></div>
+    <div class="row"><span class="k">rx / ry</span><span class="t">float(rect)</span></div>
+  </div>
+  <div class="ent"><div class="h">Front</div>
+    <div class="row"><span class="k">lx / ly</span><span class="t">float(rect)</span></div>
+    <div class="row"><span class="k">rx / ry</span><span class="t">float(rect)</span></div>
+  </div>
+  <div class="ent"><div class="h">Lane (0..n)</div>
+    <div class="row pk"><span class="k">index</span><span class="t">int PK</span></div>
+    <div class="row"><span class="k">centerX</span><span class="t">float(rect)</span></div>
+    <div class="row"><span class="k">label</span><span class="t">string?</span></div>
+  </div>
+  <div class="ent derived"><div class="h">Spot (0..m)</div>
+    <div class="row"><span class="k">x / y</span><span class="t">float(rect)</span></div>
+    <div class="row fk"><span class="k">lane</span><span class="t">int →Lane</span></div>
+    <div class="row"><span class="k">Rf</span><span class="t">파생(계산)</span></div>
+  </div>
+</div>
+
+<h2>2. 관계 / 카디널리티</h2>
+<div class="rel"><b>AppState</b> 1 ─ 1 <b>WorkImage</b> &nbsp;·&nbsp; 1 ─ 0..1 <b>RectImage</b></div>
+<div class="rel"><b>AppState</b> 1 ─ 4 <b>Corner</b> &nbsp;·&nbsp; 1 ─ 0..1 <b>Baseline</b> &nbsp;·&nbsp; 1 ─ 0..1 <b>Front</b></div>
+<div class="rel"><b>AppState</b> 1 ─ 0..n <b>Lane</b> &nbsp;·&nbsp; 1 ─ 0..m <b>Spot</b></div>
+<div class="rel"><b>Lane</b> 1 ─ 0..* <b>Spot</b> &nbsp;(한 레인에 spot 여러 개; <code>spot.lane</code>이 FK)</div>
+<div class="rel"><b>Spot</b> ⟶ <b>Baseline</b>·<b>Front</b> 참조 → <b>Rf</b> 파생값 계산(저장 X)</div>
+
+<h2>3. 파생값 — Rf 계산</h2>
+<pre>by = yAt(Baseline, spot.x)        // spot의 x에서 보간한 baseline y
+fy = yAt(Front,    spot.x)        // spot의 x에서 보간한 용매front y
+Rf = (by - spot.y) / (by - fy)    // 0~1
+
+yAt(line, x) = line.ly + (line.ry - line.ly) * (x - line.lx) / (line.rx - line.lx)</pre>
+
+<h2>4. 생명주기 / 영속성</h2>
+<table>
+<tr><th>구분</th><th>설명</th></tr>
+<tr><td>휘발성</td><td>새로고침·‘새 이미지’로 전체 초기화. 서버/DB/저장 없음</td></tr>
+<tr><td>예외 저장</td><td><code>localStorage["tlc_help_seen"]</code> — 도움말 첫 표시 여부만</td></tr>
+<tr><td>되돌리기</td><td>기하 상태(corners·baseline·front·lanes·labels·spots·sens) JSON 스냅샷(Ctrl+Z)</td></tr>
+<tr><td>출력 산출물</td><td>TSV(클립보드) · CSV · 주석 PNG · 원본 PNG (<code>toBlob</code> 다운로드)</td></tr>
+</table>
+
+<div class="foot">🔑=Foreign Key · 파란 칸=Primary Key. 관련 문서: <a href="PRD.html">PRD</a> · <a href="IA.html">IA</a></div>
+</div></div></body></html>
