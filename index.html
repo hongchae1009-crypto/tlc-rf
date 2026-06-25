@@ -400,7 +400,7 @@ function setupImage(img){
   S.work = {canvas:c, w, h};
   S.corners = autoCorners(S.work);
   S.rect = null; S.gray = null; S.baseline = null; S.front = null;
-  S.spots = []; S.lanes = []; S.laneLabels = []; S.sel = null; S.selLane = null;
+  S.spots = []; S.lanes = []; S.laneLabels = []; S.sel = null; S.selLane = null; S._sig = null;
   $('#btnAuto').disabled = false;
   goStep(2);
 }
@@ -561,49 +561,128 @@ function estimatePlateBg(data,w,y0,y1){   // 채널별 중앙값 = 플레이트 
   const med=a=>{ a.sort((p,q)=>p-q); return a[a.length>>1]||0; };
   return [med(rs),med(gs),med(bs)];
 }
-function blurField(f,w,h,r){              // 분리형 박스 블러
+/* 빠른 박스 블러 (prefix-sum, O(w·h)) — 큰 반경 배경 추정/디노이즈용 */
+function boxBlurFast(f,w,h,r){
   if(r<1) return f.slice();
-  const t=new Float32Array(w*h), o=new Float32Array(w*h);
-  for(let y=0;y<h;y++) for(let x=0;x<w;x++){ let s=0,c=0; for(let k=-r;k<=r;k++){ const xx=x+k; if(xx>=0&&xx<w){s+=f[y*w+xx];c++;} } t[y*w+x]=s/c; }
-  for(let y=0;y<h;y++) for(let x=0;x<w;x++){ let s=0,c=0; for(let k=-r;k<=r;k++){ const yy=y+k; if(yy>=0&&yy<h){s+=t[yy*w+x];c++;} } o[y*w+x]=s/c; }
+  const t=new Float32Array(w*h), o=new Float32Array(w*h), pre=new Float32Array(Math.max(w,h)+1);
+  for(let y=0;y<h;y++){ const row=y*w;
+    pre[0]=0; for(let x=0;x<w;x++) pre[x+1]=pre[x]+f[row+x];
+    for(let x=0;x<w;x++){ const a=x-r>0?x-r:0, b=x+r<w-1?x+r:w-1; t[row+x]=(pre[b+1]-pre[a])/(b-a+1); } }
+  for(let x=0;x<w;x++){
+    pre[0]=0; for(let y=0;y<h;y++) pre[y+1]=pre[y]+t[y*w+x];
+    for(let y=0;y<h;y++){ const a=y-r>0?y-r:0, b=y+r<h-1?y+r:h-1; o[y*w+x]=(pre[b+1]-pre[a])/(b-a+1); } }
   return o;
 }
-function connectedBlobs(f,w,h,thr,minArea,maxArea){   // 임계 초과 픽셀의 4-이웃 연결요소
+/* 임계 초과 픽셀의 4-이웃 연결요소 (무게중심·면적·bbox) */
+function connectedBlobs(f,w,h,thr,minArea,maxArea){
   const seen=new Uint8Array(w*h), blobs=[], stack=[];
   for(let i=0;i<f.length;i++){
     if(seen[i]||f[i]<thr) continue;
-    let sx=0,sy=0,area=0; stack.length=0; stack.push(i); seen[i]=1;
+    let sx=0,sy=0,area=0,minx=w,maxx=0,miny=h,maxy=0;
+    stack.length=0; stack.push(i); seen[i]=1;
     while(stack.length){
       const p=stack.pop(), x=p%w, y=(p/w)|0; sx+=x; sy+=y; area++;
+      if(x<minx)minx=x; if(x>maxx)maxx=x; if(y<miny)miny=y; if(y>maxy)maxy=y;
       if(x>0){const q=p-1; if(!seen[q]&&f[q]>=thr){seen[q]=1;stack.push(q);}}
       if(x<w-1){const q=p+1; if(!seen[q]&&f[q]>=thr){seen[q]=1;stack.push(q);}}
       if(y>0){const q=p-w; if(!seen[q]&&f[q]>=thr){seen[q]=1;stack.push(q);}}
       if(y<h-1){const q=p+w; if(!seen[q]&&f[q]>=thr){seen[q]=1;stack.push(q);}}
     }
-    if(area>=minArea && area<=maxArea) blobs.push({cx:sx/area, cy:sy/area, area});
+    if(area>=minArea && area<=maxArea) blobs.push({cx:sx/area,cy:sy/area,area,minx,maxx,miny,maxy});
   }
   return blobs;
 }
-function detectSpots(){
-  const {canvas,w}=S.rect;
-  const data=canvas.getContext('2d').getImageData(0,0,w,S.rect.h).data;
-  const {y0,y1}=bandY(); const bh=y1-y0;
-  if(bh<6){ S.spots=[]; S.sel=null; clusterLanes(); return; }
-  const bg=estimatePlateBg(data,w,y0,y1);
-  const diff=new Float32Array(w*bh);
-  for(let y=y0;y<y1;y++) for(let x=0;x<w;x++){
-    const i=(y*w+x)*4;
-    diff[(y-y0)*w+x]=Math.abs(data[i]-bg[0])+Math.abs(data[i+1]-bg[1])+Math.abs(data[i+2]-bg[2]);
+/* 가늘고 긴 줄(손글씨·원점선)·저밀도 노이즈 제거 */
+function rejectByShape(b){
+  const bw=b.maxx-b.minx+1, bh=b.maxy-b.miny+1, fill=b.area/(bw*bh);
+  const aspect=Math.max(bw,bh)/Math.max(1,Math.min(bw,bh));
+  if(aspect>3.2 && fill<0.55) return true;
+  if(fill<0.26) return true;
+  return false;
+}
+/* blob bbox 안에서 signal 국소 최대(비최대 억제) → 인접 spot 분리 */
+function findPeaksInBlob(sig,w,h,b,minDist,thr){
+  const cand=[];
+  const x0=Math.max(1,b.minx),x1=Math.min(w-2,b.maxx),y0=Math.max(1,b.miny),y1=Math.min(h-2,b.maxy);
+  for(let y=y0;y<=y1;y++) for(let x=x0;x<=x1;x++){
+    const v=sig[y*w+x]; if(v<thr) continue;
+    let isMax=true;
+    for(let dy=-1;dy<=1&&isMax;dy++) for(let dx=-1;dx<=1;dx++){ if(sig[(y+dy)*w+(x+dx)]>v){isMax=false;break;} }
+    if(isMax) cand.push({x,y,v});
   }
-  const bl=blurField(diff,w,bh,Math.max(1,Math.round(Math.min(w,bh)/110)));
-  let mean=0; for(const v of bl) mean+=v; mean/=bl.length;
-  let varc=0; for(const v of bl) varc+=(v-mean)*(v-mean); const std=Math.sqrt(varc/bl.length);
-  const thr=Math.max(12, mean + S.sens*std);            // sens 작을수록 임계 낮음(=민감)
-  const minArea=Math.max(8, Math.round(w*bh*0.0005));
-  const maxArea=Math.round(w*bh*0.22);
-  const blobs=connectedBlobs(bl,w,bh,thr,minArea,maxArea);
-  S.spots=blobs.map(b=>({x:Math.round(b.cx), y:Math.round(b.cy)+y0, lane:0}));
+  cand.sort((a,c)=>c.v-a.v);
+  const kept=[];
+  for(const p of cand){ if(kept.every(q=>Math.hypot(q.x-p.x,q.y-p.y)>=minDist)) kept.push(p); }
+  if(!kept.length) kept.push({x:Math.round(b.cx),y:Math.round(b.cy),v:thr});
+  return kept;
+}
+/* peak 주변 (signal-floor) 가중 무게중심 → 정확한 spot 중심 */
+function weightedCentroid(sig,w,h,px,py,rad,floor){
+  let sx=0,sy=0,sw=0;
+  const x0=Math.max(0,px-rad),x1=Math.min(w-1,px+rad),y0=Math.max(0,py-rad),y1=Math.min(h-1,py+rad);
+  for(let y=y0;y<=y1;y++) for(let x=x0;x<=x1;x++){
+    const wgt=sig[y*w+x]-floor; if(wgt<=0) continue;
+    sx+=x*wgt; sy+=y*wgt; sw+=wgt;
+  }
+  return sw>0 ? {x:sx/sw, y:sy/sw} : {x:px, y:py};
+}
+/* ── spot 검출: 조명 평탄화 → quench/색 신호 → 적응임계 → 모양필터·분리·가중중심 ── */
+function detectSpots(){
+  const {canvas,w}=S.rect, H=S.rect.h;
+  const data=canvas.getContext('2d').getImageData(0,0,w,H).data;
+  const {y0,y1}=bandY(); const bh=y1-y0;
+  if(bh<8){ S.spots=[]; S.sel=null; S.selLane=null; S._sig=null; clusterLanes(); return; }
+  // band 채널 배열
+  const N=w*bh, R=new Float32Array(N), G=new Float32Array(N), B=new Float32Array(N);
+  for(let y=y0;y<y1;y++) for(let x=0;x<w;x++){
+    const i=(y*w+x)*4, j=(y-y0)*w+x; R[j]=data[i]; G[j]=data[i+1]; B[j]=data[i+2];
+  }
+  // 국소 배경(큰 반경 블러)로 조명 평탄화
+  const big=Math.max(8, Math.round(Math.min(w,bh)/7));
+  const bgR=boxBlurFast(R,w,bh,big), bgG=boxBlurFast(G,w,bh,big), bgB=boxBlurFast(B,w,bh,big);
+  const sig0=new Float32Array(N);
+  for(let j=0;j<N;j++){
+    const quench=bgG[j]-G[j];                                   // UV254: 형광 G 감소(어두운 spot)
+    const cdist=Math.abs(R[j]-bgR[j])+Math.abs(G[j]-bgG[j])+Math.abs(B[j]-bgB[j]); // 색 spot
+    sig0[j]=Math.max(quench>0?quench:0, cdist*0.85);
+  }
+  const spotR=Math.max(4, Math.round(Math.min(w,bh)/45));
+  const sig=boxBlurFast(sig0,w,bh,Math.max(1,Math.round(spotR/2)));   // 디노이즈
+  // 가장자리 margin 제외(원점선·용매선·plate edge)
+  const mxg=Math.max(3,Math.round(w*0.02)), mtop=Math.max(3,Math.round(bh*0.03)), mbot=Math.max(4,Math.round(bh*0.05));
+  for(let y=0;y<bh;y++) for(let x=0;x<w;x++){ if(x<mxg||x>=w-mxg||y<mtop||y>=bh-mbot) sig[y*w+x]=0; }
+  // 적응 임계 (평탄화 신호 통계)
+  let mean=0; for(let j=0;j<N;j++) mean+=sig[j]; mean/=N;
+  let varc=0; for(let j=0;j<N;j++){ const d=sig[j]-mean; varc+=d*d; } const std=Math.sqrt(varc/N);
+  const thr=Math.max(8, mean + S.sens*std);
+  const minArea=Math.max(10, Math.round(Math.PI*spotR*spotR*0.22));
+  const maxArea=Math.round(w*bh*0.25);
+  // blob → 모양필터 → peak 분리 → 가중 중심
+  const blobs=connectedBlobs(sig,w,bh,thr,minArea,maxArea), out=[];
+  for(const b of blobs){
+    if(rejectByShape(b)) continue;
+    for(const pk of findPeaksInBlob(sig,w,bh,b,Math.max(spotR*1.4,6),thr)){
+      const c=weightedCentroid(sig,w,bh,pk.x,pk.y,spotR,thr*0.6);
+      out.push({x:Math.round(c.x), y:Math.round(c.y)+y0, lane:0});
+    }
+  }
+  // 너무 가까운 중복 제거
+  S.spots=[];
+  for(const s of out){ if(S.spots.every(t=>Math.hypot(t.x-s.x,t.y-s.y)>=spotR*1.2)) S.spots.push(s); }
+  S._sig={data:sig, w, h:bh, y0, spotR, thr};                  // 수동 추가 스냅용
   clusterLanes(); assignLanes(); S.sel=null; S.selLane=null;
+}
+/* 클릭 근처에 강한 국소 최대가 있으면 그 중심으로 스냅(없으면 클릭 위치 유지) */
+function snapToSpot(px,py){
+  const c=S._sig; if(!c || c.w!==S.rect.w) return {x:px,y:py};
+  const lx=px, ly=py-c.y0; if(ly<0||ly>=c.h) return {x:px,y:py};
+  const rad=c.spotR; let best=null,bv=c.thr*0.85;
+  for(let y=Math.max(0,ly-rad);y<=Math.min(c.h-1,ly+rad);y++) for(let x=Math.max(0,lx-rad);x<=Math.min(c.w-1,lx+rad);x++){
+    const v=c.data[y*c.w+x]; if(v>bv){bv=v;best={x,y};}
+  }
+  if(!best) return {x:px,y:py};
+  const wc=weightedCentroid(c.data,c.w,c.h,best.x,best.y,rad,c.thr*0.6);
+  return {x:Math.round(wc.x), y:Math.round(wc.y)+c.y0};
 }
 /* 레인 = spot x 클러스터 (없으면 균등 분할 fallback) */
 function defaultLanes(n){ const w=S.rect?.w||S.gray?.w||100; return Array.from({length:n},(_,i)=>Math.round(w*(i+1)/(n+1))); }
@@ -885,9 +964,10 @@ cv.addEventListener('pointerdown', e=>{
     // 빈 곳 클릭 → 그 위치에 spot 추가(가장 가까운 레인 배정)
     if(S.step===4 && p.y>yAt(S.front,p.x) && p.y<yAt(S.baseline,p.x)){
       snapshot();
-      if(!S.lanes.length){ S.lanes=[Math.round(p.x)]; S.laneLabels=['']; }
-      let nl=0,nd=1e9; S.lanes.forEach((cx,i)=>{const d=Math.abs(cx-p.x); if(d<nd){nd=d;nl=i;}});
-      S.spots.push({x:Math.round(p.x), y:Math.round(p.y), lane:nl}); S.sel=S.spots.length-1; S.selLane=null;
+      const sp=snapToSpot(Math.round(p.x), Math.round(p.y));    // 근처 얼룩 중심으로 스냅
+      if(!S.lanes.length){ S.lanes=[sp.x]; S.laneLabels=['']; }
+      let nl=0,nd=1e9; S.lanes.forEach((cx,i)=>{const d=Math.abs(cx-sp.x); if(d<nd){nd=d;nl=i;}});
+      S.spots.push({x:sp.x, y:sp.y, lane:nl}); S.sel=S.spots.length-1; S.selLane=null;
       render(); refreshPanel(); toast('spot 추가됨');
     }
   }
