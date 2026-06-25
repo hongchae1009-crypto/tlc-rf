@@ -212,6 +212,7 @@ input[type=range]{flex:1.6; accent-color:var(--blue);}
   </div>
   <div class="top-right">
     <button class="btn btn-warn" id="btnAuto" disabled>⚡ 전자동 분석</button>
+    <button class="btn btn-sm" id="btnLoad" title="세션(.json) 불러오기">📂 세션</button>
     <button class="btn btn-sm" id="btnReset">새 이미지</button>
     <button class="btn btn-sm" id="btnHelp" title="사용법">❓ 도움말</button>
   </div>
@@ -257,7 +258,7 @@ input[type=range]{flex:1.6; accent-color:var(--blue);}
   </div>
 </div>
 
-<input type="file" id="file" accept="image/*" class="hide"/>
+<input type="file" id="file" accept="image/*,.json,application/json" class="hide"/>
 <div class="toast" id="toast"></div>
 
 <!-- 도움말 모달 -->
@@ -321,6 +322,17 @@ input[type=range]{flex:1.6; accent-color:var(--blue);}
 const $ = s => document.querySelector(s);
 const cv = $('#cv'), ctx = cv.getContext('2d');
 const SPOT_COLORS = ['#1a6bb5','#1D9E75','#BA7517','#c0392b','#7b3fb5','#0e8a8a','#d2691e','#b5179e'];
+/* 검출 알고리즘 튜닝 파라미터 (검증 하니스 #calib 에서 조정·최적화).
+   기본값 = 현재 동작과 동일(무회귀). polarity: dark=UV254 소광, bright=UV365 형광, both=양쪽. */
+const TUNE = {
+  polarity: 'dark',   // dark | bright | both
+  promDrop: 0.35,     // peakProminent drop 계수((v-thr)에 곱)
+  edgeMrg:  0.045,    // 좌우 가장자리 여백 비율
+  aspectMax: 4,       // rejectByShape 막대 종횡비 컷
+  spotDiv:  45,       // spotR = min(w,bh)/spotDiv
+  colorW:   0.85,     // 색 신호 가중
+  bgDiv:    7,        // 배경 블러 반경 = min(w,bh)/bgDiv
+};
 
 /* ── 전역 상태 ───────────────────────────────────────────── */
 const S = {
@@ -337,6 +349,7 @@ const S = {
   sel: null,                  // 선택된 spot index
   selLane: null,              // 선택된 레인 index (모바일 삭제용)
   sens: 1.3,                  // spot 검출 감도 k (작을수록 민감)
+  modality: 'uv254',          // 검출 방식 태그(uv254|color|iodine|uv365) — 세션/데이터셋용
   zoom: 1, panX: 0, panY: 0,  // 모바일 캔버스 줌/팬 (transform)
   peek: false,                // 결과 단계에서 길게 누르면 마커 없는 원본 미리보기
   labelScale: 1,              // Rf(피크) 라벨 글씨 크기 배율
@@ -370,12 +383,58 @@ function undo(){
 
 /* ════════════ ① 이미지 입력/로드 ════════════ */
 function loadFromFile(file){
-  if(!file || !file.type.startsWith('image/')){ toast('이미지 파일이 아닙니다'); return; }
+  if(!file) return;
+  if(file.type==='application/json' || /\.json$/i.test(file.name)){   // 세션(.json) 불러오기
+    const r=new FileReader();
+    r.onload=()=>{ try{ loadSession(JSON.parse(r.result)); }catch(err){ toast('세션 JSON 파싱 실패'); } };
+    r.onerror=()=>toast('파일 읽기 실패'); r.readAsText(file); return;
+  }
+  if(!file.type.startsWith('image/')){ toast('이미지 또는 세션(.json) 파일이 아닙니다'); return; }
   const url = URL.createObjectURL(file);
   const img = new Image();
   img.onload = ()=>{ URL.revokeObjectURL(url); setupImage(img); };
   img.onerror = ()=>{ URL.revokeObjectURL(url); toast('이미지를 열 수 없습니다'); };
   img.src = url;
+}
+/* 세션 저장: 보정 플레이트 이미지 + 정답(기준선·spot·레인)을 자체 완결형 JSON 1개로.
+   데이터셋 제작·검증 하니스·작업 보존에 사용. */
+function saveSession(){
+  if(!S.rect){ toast('보정된 이미지가 없습니다'); return; }
+  const obj={
+    ver:1,
+    plate:{ w:S.rect.w, h:S.rect.h, image:S.rect.canvas.toDataURL('image/png') },
+    baseline:S.baseline, front:S.front,
+    lanes:S.lanes, laneLabels:S.laneLabels, spots:S.spots,
+    sens:S.sens, modality:S.modality||'uv254', note:''
+  };
+  const blob=new Blob([JSON.stringify(obj)],{type:'application/json'});
+  triggerDownload(blob,'tlc-session.json'); toast('세션 저장(.json)');
+}
+/* 세션 불러오기: 보정 이미지 기준이므로 원근보정 단계를 건너뛰고 결과 단계로 복원. */
+function loadSession(obj){
+  if(!obj || !obj.plate || !obj.plate.image){ toast('잘못된 세션 파일'); return; }
+  const img=new Image();
+  img.onload=()=>{
+    const W=obj.plate.w||img.width, H=obj.plate.h||img.height;
+    const c=document.createElement('canvas'); c.width=W; c.height=H;
+    c.getContext('2d').drawImage(img,0,0,W,H);
+    S.work={canvas:c,w:W,h:H};                                  // 이미 보정됨 → work=rect
+    S.corners=[{x:0,y:0},{x:W,y:0},{x:W,y:H},{x:0,y:H}];
+    S.rect={canvas:c,w:W,h:H}; buildGray();
+    S.baseline=obj.baseline||{lx:0,ly:Math.round(H*0.9),rx:W,ry:Math.round(H*0.9)};
+    S.front   =obj.front   ||{lx:0,ly:Math.round(H*0.1),rx:W,ry:Math.round(H*0.1)};
+    S.lanes=Array.isArray(obj.lanes)?obj.lanes.slice():[];
+    S.laneLabels=Array.isArray(obj.laneLabels)?obj.laneLabels.slice():[];
+    S.spots=(obj.spots||[]).map(s=>({x:s.x,y:s.y,lane:s.lane||0}));
+    S.sens=obj.sens!=null?obj.sens:1.3; S.modality=obj.modality||'uv254';
+    S.sel=null; S.selLane=null; S._sig=null;
+    if(!S.lanes.length){ clusterLanes(); assignLanes(); }
+    undoStack.length=0; $('#btnAuto').disabled=false;
+    goStep(5);
+    toast('세션 불러옴');
+  };
+  img.onerror=()=>toast('세션 이미지 로드 실패');
+  img.src=obj.plate.image;
 }
 /* 작업 이미지를 90° 회전 (가로 사진 → 세로). 회전 후 코너 재추정·뷰 갱신. */
 function rotateWork(cw){
@@ -596,7 +655,7 @@ function connectedBlobs(f,w,h,thr,minArea,maxArea){
 function rejectByShape(b){
   const bw=b.maxx-b.minx+1, bh=b.maxy-b.miny+1, fill=b.area/(bw*bh);
   const aspect=Math.max(bw,bh)/Math.max(1,Math.min(bw,bh));
-  if(aspect>4) return true;                    // 가늘고 긴 막대 = 모서리 음영·용매선(꽉 차 있어도 spot 아님)
+  if(aspect>TUNE.aspectMax) return true;       // 가늘고 긴 막대 = 모서리 음영·용매선(꽉 차 있어도 spot 아님)
   if(aspect>3.2 && fill<0.55) return true;     // 가늘고 성긴 줄(손글씨·원점선)
   if(fill<0.26) return true;                   // 저밀도 노이즈
   return false;
@@ -628,11 +687,11 @@ function findPeaksInBlob(sig,w,h,b,minDist,thr){
     if(isMax) cand.push({x,y,v});
   }
   cand.sort((a,c)=>c.v-a.v);
-  const prad=Math.max(3,Math.round(minDist*0.7));
+  const prad=Math.max(4,Math.round(minDist));   // 봉우리 하강을 충분히 멀리(포화 코어 spot 대비)까지 탐색
   const kept=[];
   for(const p of cand){
     if(!kept.every(q=>Math.hypot(q.x-p.x,q.y-p.y)>=minDist)) continue;
-    if(!peakProminent(sig,w,h,p.x,p.y,prad,Math.max(3,(p.v-thr)*0.35))) continue;  // 줄/평탄 봉우리 탈락
+    if(!peakProminent(sig,w,h,p.x,p.y,prad,Math.max(3,(p.v-thr)*TUNE.promDrop))) continue;  // 줄/평탄 봉우리 탈락
     kept.push(p);
   }
   return kept;
@@ -659,18 +718,22 @@ function detectSpots(){
     const i=(y*w+x)*4, j=(y-y0)*w+x; R[j]=data[i]; G[j]=data[i+1]; B[j]=data[i+2];
   }
   // 국소 배경(큰 반경 블러)로 조명 평탄화
-  const big=Math.max(8, Math.round(Math.min(w,bh)/7));
+  const big=Math.max(8, Math.round(Math.min(w,bh)/TUNE.bgDiv));
   const bgR=boxBlurFast(R,w,bh,big), bgG=boxBlurFast(G,w,bh,big), bgB=boxBlurFast(B,w,bh,big);
-  const sig0=new Float32Array(N);
+  const pol=TUNE.polarity, sig0=new Float32Array(N);
   for(let j=0;j<N;j++){
-    const quench=bgG[j]-G[j];                                   // UV254: 형광 G 감소(어두운 spot)
+    const dark=bgG[j]-G[j];                                     // UV254: 형광 G 감소(어두운 spot)
+    let lum;                                                    // 극성별 휘도 신호
+    if(pol==='bright') lum = -dark>0?-dark:0;                   // UV365: 어두운 배경 위 밝은 spot
+    else if(pol==='both') lum = Math.abs(dark);                 // 양쪽
+    else lum = dark>0?dark:0;                                   // dark(기본)
     const cdist=Math.abs(R[j]-bgR[j])+Math.abs(G[j]-bgG[j])+Math.abs(B[j]-bgB[j]); // 색 spot
-    sig0[j]=Math.max(quench>0?quench:0, cdist*0.85);
+    sig0[j]=Math.max(lum, cdist*TUNE.colorW);
   }
-  const spotR=Math.max(4, Math.round(Math.min(w,bh)/45));
+  const spotR=Math.max(4, Math.round(Math.min(w,bh)/TUNE.spotDiv));
   const sig=boxBlurFast(sig0,w,bh,Math.max(1,Math.round(spotR/2)));   // 디노이즈
   // 가장자리 margin 제외(원점선·용매선·plate edge)
-  const mxg=Math.max(4,Math.round(w*0.045)), mtop=Math.max(3,Math.round(bh*0.03)), mbot=Math.max(4,Math.round(bh*0.05));
+  const mxg=Math.max(4,Math.round(w*TUNE.edgeMrg)), mtop=Math.max(3,Math.round(bh*0.03)), mbot=Math.max(4,Math.round(bh*0.05));
   for(let y=0;y<bh;y++) for(let x=0;x<w;x++){ if(x<mxg||x>=w-mxg||y<mtop||y>=bh-mbot) sig[y*w+x]=0; }
   // 적응 임계 (평탄화 신호 통계)
   let mean=0; for(let j=0;j<N;j++) mean+=sig[j]; mean/=N;
@@ -1187,6 +1250,19 @@ const PANEL = {
         <button class="btn btn-sm" id="bOrig">🖼️ 원본 이미지</button>
       </div>
     </div>
+    <div class="psec" style="margin-top:6px"><h4>세션 저장 (정답 데이터셋)</h4>
+      <div class="field"><label>검출 방식</label>
+        <select id="selMod" style="flex:1;min-height:34px;border:1px solid var(--bd2);border-radius:8px;padding:4px 8px;font-family:var(--f)">
+          <option value="uv254">UV254 소광(어두운 spot)</option>
+          <option value="color">발색시약(색)</option>
+          <option value="iodine">요오드 챔버</option>
+          <option value="uv365">UV365 자체형광(밝은 spot)</option>
+        </select></div>
+      <div class="row-btns" style="margin-top:8px">
+        <button class="btn btn-sm btn-g" id="bSaveSession">💾 세션 저장(.json)</button>
+      </div>
+      <div class="phelp muted" style="margin-top:8px">이미지+기준선+정답 spot을 JSON 한 파일로 저장합니다. 상단 <b>📂 세션</b>으로 다시 불러옵니다.</div>
+    </div>
     <div class="phelp muted">‘표 복사’는 ELN/엑셀에 바로 붙여넣을 수 있는 형식(TSV)입니다. ‘원본 이미지’는 마커 없는 보정 플레이트입니다.</div>`;
   }
 };
@@ -1218,6 +1294,8 @@ function bindPanel(){
   // step5
   on('rLblSize','input',e=>{ S.labelScale=+e.target.value; const v=$('#vLblSize'); if(v) v.textContent=Math.round(S.labelScale*100)+'%'; render(); });
   on('bCopy','click',copyTable); on('bCsv','click',downloadCSV); on('bPng','click',downloadPNG); on('bOrig','click',downloadOriginal);
+  const sm=$('#selMod'); if(sm){ sm.value=S.modality||'uv254'; sm.addEventListener('change',e=>{ S.modality=e.target.value; }); }
+  on('bSaveSession','click',saveSession);
   document.querySelectorAll('.lbl').forEach(inp=>inp.addEventListener('input',e=>{ S.laneLabels[+e.target.dataset.lane]=e.target.value; }));
 }
 
@@ -1321,6 +1399,7 @@ $('#btnAuto').addEventListener('click', ()=>{
 
 /* ════════════ 입력 이벤트 ════════════ */
 $('#drop').addEventListener('click', ()=>$('#file').click());
+$('#btnLoad').addEventListener('click', ()=>$('#file').click());
 $('#file').addEventListener('change', e=>{ if(e.target.files[0]) loadFromFile(e.target.files[0]); e.target.value=''; });
 const drop=$('#drop'), stage=$('#stage');
 ['dragenter','dragover'].forEach(ev=>stage.addEventListener(ev,e=>{e.preventDefault(); drop.classList.add('over');}));
@@ -1346,6 +1425,122 @@ $('#helpOverlay').addEventListener('click', e=>{ if(e.target===$('#helpOverlay')
 window.addEventListener('keydown', e=>{ if(e.key==='Escape' && $('#helpOverlay').classList.contains('show')) closeHelp(); });
 // 처음 방문 시 1회 자동 표시
 try{ if(!localStorage.getItem('tlc_help_seen')) openHelp(); }catch(e){}
+
+/* ════════════ 검증·튜닝 하니스 (#calib 숨김 모드) ════════════
+   데이터셋 세션(.json) 다수를 불러와 detectSpots를 돌리고, 정답 대비
+   정밀도/재현율/F1/Rf MAE를 산출. 파라미터(TUNE·sens)를 바꿔가며 최적화. */
+const CAL = { samples:[] };
+function modPolarity(m){ return m==='uv365' ? 'bright' : 'dark'; }
+function loadPlate(obj){
+  return new Promise((res,rej)=>{
+    const img=new Image();
+    img.onload=()=>{ const W=obj.plate.w||img.width, H=obj.plate.h||img.height;
+      const c=document.createElement('canvas'); c.width=W; c.height=H;
+      c.getContext('2d').drawImage(img,0,0,W,H); res({canvas:c,w:W,h:H}); };
+    img.onerror=rej; img.src=obj.plate.image;
+  });
+}
+async function evalSample(obj, opt){
+  const rect=await loadPlate(obj);
+  S.rect=rect; buildGray();
+  S.baseline=obj.baseline; S.front=obj.front; S.sens=opt.sens;
+  TUNE.polarity = opt.autoPol ? modPolarity(obj.modality) : opt.polarity;
+  detectSpots();
+  const det=S.spots.map(s=>({x:s.x,y:s.y})), tru=(obj.spots||[]).map(s=>({x:s.x,y:s.y}));
+  const tol=Math.max(8, Math.round(rect.h*opt.tol));
+  const used=new Array(det.length).fill(false); let tp=0; const rfErr=[];
+  for(const t of tru){ let best=-1,bd=tol;
+    det.forEach((d,i)=>{ if(used[i])return; const dist=Math.hypot(d.x-t.x,d.y-t.y); if(dist<bd){bd=dist;best=i;} });
+    if(best>=0){ used[best]=true; tp++; rfErr.push(Math.abs(rfOf(det[best])-rfOf(t))); } }
+  return {modality:obj.modality||'?', nTrue:tru.length, nDet:det.length, tp, fp:det.length-tp, fn:tru.length-tp, rfErr};
+}
+function calOpt(){
+  const v=id=>+document.getElementById(id).value;
+  Object.assign(TUNE,{ promDrop:v('cPromDrop'), edgeMrg:v('cEdge'), aspectMax:v('cAspect'), spotDiv:v('cSpotDiv'), colorW:v('cColorW'), bgDiv:v('cBgDiv') });
+  return { sens:v('cSens'), tol:v('cTol'), autoPol:document.getElementById('cAutoPol').checked, polarity:document.getElementById('cPolarity').value };
+}
+function f1(tp,fp,fn){ const p=tp/(tp+fp||1), r=tp/(tp+fn||1); return {p,r,f:2*p*r/((p+r)||1)}; }
+function mean(a){ return a.length? a.reduce((x,y)=>x+y,0)/a.length : 0; }
+async function calRun(){
+  if(!CAL.samples.length){ toast('세션(.json) 데이터셋을 먼저 불러오세요'); return; }
+  const opt=calOpt(); const rows=[]; const byMod={};
+  for(const s of CAL.samples){
+    let r; try{ r=await evalSample(s.obj,opt); }catch(e){ r={modality:'ERR',nTrue:0,nDet:0,tp:0,fp:0,fn:0,rfErr:[]}; }
+    r.name=s.name; rows.push(r);
+    (byMod[r.modality]=byMod[r.modality]||[]).push(r);
+  }
+  // 집계
+  const agg=rows.reduce((a,r)=>({tp:a.tp+r.tp,fp:a.fp+r.fp,fn:a.fn+r.fn,rf:a.rf.concat(r.rfErr)}),{tp:0,fp:0,fn:0,rf:[]});
+  const A=f1(agg.tp,agg.fp,agg.fn);
+  const fmtPct=x=>(x*100).toFixed(1)+'%';
+  let html=`<table style="width:100%;border-collapse:collapse;font-size:12px"><thead>
+    <tr style="text-align:left;border-bottom:2px solid #ccc"><th>샘플</th><th>방식</th><th>정답</th><th>검출</th><th>TP</th><th>FP</th><th>FN</th><th>F1</th><th>RfMAE</th></tr></thead><tbody>`;
+  rows.forEach(r=>{ const k=f1(r.tp,r.fp,r.fn);
+    const bad=(r.fp>0||r.fn>0);
+    html+=`<tr style="border-bottom:1px solid #eee;${bad?'background:#fff4f4':''}"><td>${r.name}</td><td>${r.modality}</td><td>${r.nTrue}</td><td>${r.nDet}</td><td>${r.tp}</td><td style="color:${r.fp?'#c0392b':'#888'}">${r.fp}</td><td style="color:${r.fn?'#BA7517':'#888'}">${r.fn}</td><td>${fmtPct(k.f)}</td><td>${mean(r.rfErr).toFixed(3)}</td></tr>`; });
+  html+=`</tbody><tfoot><tr style="border-top:2px solid #ccc;font-weight:700"><td colspan="4">전체 (${rows.length}샘플)</td><td>${agg.tp}</td><td>${agg.fp}</td><td>${agg.fn}</td><td>${fmtPct(A.f)}</td><td>${mean(agg.rf).toFixed(3)}</td></tr></tfoot></table>`;
+  // 방식별
+  html+=`<div style="margin-top:10px;font-weight:700">방식별</div><table style="width:100%;border-collapse:collapse;font-size:12px"><tbody>`;
+  Object.keys(byMod).forEach(m=>{ const g=byMod[m].reduce((a,r)=>({tp:a.tp+r.tp,fp:a.fp+r.fp,fn:a.fn+r.fn,rf:a.rf.concat(r.rfErr)}),{tp:0,fp:0,fn:0,rf:[]});
+    const k=f1(g.tp,g.fp,g.fn);
+    html+=`<tr style="border-bottom:1px solid #eee"><td style="width:90px">${m}</td><td>P ${fmtPct(k.p)}</td><td>R ${fmtPct(k.r)}</td><td><b>F1 ${fmtPct(k.f)}</b></td><td>RfMAE ${mean(g.rf).toFixed(3)}</td></tr>`; });
+  html+=`</tbody></table>`;
+  html+=`<div style="margin-top:10px;font-size:11px;color:#666">TUNE: ${JSON.stringify(TUNE)} · sens ${opt.sens} · tol ${opt.tol}·H</div>`;
+  document.getElementById('cResults').innerHTML=html;
+  toast(`평가 완료 — 전체 F1 ${fmtPct(A.f)}`);
+}
+function calLoadFiles(files){
+  let pending=files.length;
+  if(!pending) return;
+  [...files].forEach(f=>{
+    const r=new FileReader();
+    r.onload=()=>{ try{ const o=JSON.parse(r.result); if(o&&o.plate&&o.plate.image) CAL.samples.push({name:f.name.replace(/\.json$/i,''),obj:o}); }catch(e){}
+      if(--pending===0){ document.getElementById('cCount').textContent=CAL.samples.length+'개 로드됨'; toast(CAL.samples.length+'개 샘플 로드'); } };
+    r.onerror=()=>{ if(--pending===0) document.getElementById('cCount').textContent=CAL.samples.length+'개 로드됨'; };
+    r.readAsText(f);
+  });
+}
+function initCalib(){
+  if(document.getElementById('calibUI')) { document.getElementById('calibUI').style.display='block'; return; }
+  const n=(id,label,val,step,min,max)=>`<label style="display:flex;gap:6px;align-items:center;font-size:12px">${label}<input id="${id}" type="number" value="${val}" step="${step}" ${min!=null?`min="${min}"`:''} ${max!=null?`max="${max}"`:''} style="width:64px;padding:3px 5px;border:1px solid #ccc;border-radius:5px"></label>`;
+  const d=document.createElement('div'); d.id='calibUI';
+  d.style.cssText='position:fixed;inset:0;z-index:9999;background:#fff;overflow:auto;padding:18px 22px;font-family:var(--f)';
+  d.innerHTML=`
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+      <div style="font-size:18px;font-weight:700">🔬 TLC 검출 검증·튜닝 하니스 <span style="font-size:12px;color:#888;font-weight:400">(#calib)</span></div>
+      <button id="cClose" class="btn btn-sm">✕ 닫기</button>
+    </div>
+    <div style="display:flex;gap:22px;flex-wrap:wrap;align-items:flex-start">
+      <div style="flex:0 0 300px;border:1px solid #e2e4e9;border-radius:10px;padding:14px;background:#f7f8fa">
+        <div style="font-weight:700;margin-bottom:8px">데이터셋</div>
+        <input id="cFiles" type="file" accept=".json,application/json" multiple style="font-size:12px;width:100%">
+        <div id="cCount" style="font-size:12px;color:#666;margin:6px 0 12px">0개 로드됨</div>
+        <div style="font-weight:700;margin-bottom:8px">파라미터</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:7px">
+          ${n('cSens','감도',1.3,0.1)}
+          ${n('cPromDrop','prom',0.35,0.05)}
+          ${n('cEdge','여백%',0.045,0.005)}
+          ${n('cAspect','막대',4,0.5)}
+          ${n('cSpotDiv','spotDiv',45,1)}
+          ${n('cColorW','색가중',0.85,0.05)}
+          ${n('cBgDiv','bgDiv',7,1)}
+          ${n('cTol','tol·H',0.03,0.005)}
+        </div>
+        <label style="display:flex;gap:6px;align-items:center;font-size:12px;margin-top:9px"><input id="cAutoPol" type="checkbox" checked> 방식별 극성 자동(uv365=bright)</label>
+        <label style="display:flex;gap:6px;align-items:center;font-size:12px;margin-top:6px">고정 극성<select id="cPolarity" style="padding:3px"><option value="dark">dark</option><option value="bright">bright</option><option value="both">both</option></select></label>
+        <button id="cRun" class="btn btn-p" style="width:100%;margin-top:12px">▶ 평가 실행</button>
+        <div style="font-size:11px;color:#888;margin-top:8px">파라미터 조정 → 평가 실행 반복으로 전체 F1을 최대화하세요.</div>
+      </div>
+      <div style="flex:1;min-width:340px"><div id="cResults" style="font-size:13px;color:#666">데이터셋(.json)을 불러오고 ‘평가 실행’을 누르세요.</div></div>
+    </div>`;
+  document.body.appendChild(d);
+  document.getElementById('cClose').addEventListener('click',()=>{ d.style.display='none'; location.hash=''; });
+  document.getElementById('cFiles').addEventListener('change',e=>calLoadFiles(e.target.files));
+  document.getElementById('cRun').addEventListener('click',calRun);
+}
+function checkCalibHash(){ if(location.hash==='#calib') initCalib(); }
+window.addEventListener('hashchange', checkCalibHash);
+checkCalibHash();
 
 /* 초기화 */
 goStep(1);
