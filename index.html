@@ -336,7 +336,7 @@ const S = {
   spots: [],                  // {x, y, lane}  rect 좌표 (자유 위치)
   sel: null,                  // 선택된 spot index
   selLane: null,              // 선택된 레인 index (모바일 삭제용)
-  sens: 1.0,                  // spot 검출 감도 k (작을수록 민감)
+  sens: 1.3,                  // spot 검출 감도 k (작을수록 민감)
   zoom: 1, panX: 0, panY: 0,  // 모바일 캔버스 줌/팬 (transform)
   peek: false,                // 결과 단계에서 길게 누르면 마커 없는 원본 미리보기
   labelScale: 1,              // Rf(피크) 라벨 글씨 크기 배율
@@ -592,13 +592,30 @@ function connectedBlobs(f,w,h,thr,minArea,maxArea){
   }
   return blobs;
 }
-/* 가늘고 긴 줄(손글씨·원점선)·저밀도 노이즈 제거 */
+/* 가늘고 긴 줄(손글씨·원점선·plate 모서리 음영)·저밀도 노이즈 제거 */
 function rejectByShape(b){
   const bw=b.maxx-b.minx+1, bh=b.maxy-b.miny+1, fill=b.area/(bw*bh);
   const aspect=Math.max(bw,bh)/Math.max(1,Math.min(bw,bh));
-  if(aspect>3.2 && fill<0.55) return true;
-  if(fill<0.26) return true;
+  if(aspect>4) return true;                    // 가늘고 긴 막대 = 모서리 음영·용매선(꽉 차 있어도 spot 아님)
+  if(aspect>3.2 && fill<0.55) return true;     // 가늘고 성긴 줄(손글씨·원점선)
+  if(fill<0.26) return true;                   // 저밀도 노이즈
   return false;
+}
+/* 봉우리 돌출도: 상하좌우 rad 안에서 신호 최저값이 v-drop 이하로 떨어져야 진짜 spot.
+   세로 줄·가로 줄은 한 축이 평탄해 탈락(인접 spot 사이 saddle은 최저값으로 통과). */
+function peakProminent(sig,w,h,x,y,rad,drop){
+  const v=sig[y*w+x];
+  const dirs=[[1,0],[-1,0],[0,1],[0,-1]];
+  for(const [dx,dy] of dirs){
+    let mn=v;
+    for(let d=1;d<=rad;d++){
+      const xx=x+dx*d, yy=y+dy*d;
+      if(xx<0||xx>=w||yy<0||yy>=h){ mn=0; break; }   // 밴드 밖(0으로 평탄화된 가장자리)도 하강으로 인정
+      const s=sig[yy*w+xx]; if(s<mn) mn=s;
+    }
+    if(v-mn < drop) return false;                      // 이 방향으로 충분히 안 떨어짐 → 줄/평탄
+  }
+  return true;
 }
 /* blob bbox 안에서 signal 국소 최대(비최대 억제) → 인접 spot 분리 */
 function findPeaksInBlob(sig,w,h,b,minDist,thr){
@@ -611,9 +628,13 @@ function findPeaksInBlob(sig,w,h,b,minDist,thr){
     if(isMax) cand.push({x,y,v});
   }
   cand.sort((a,c)=>c.v-a.v);
+  const prad=Math.max(3,Math.round(minDist*0.7));
   const kept=[];
-  for(const p of cand){ if(kept.every(q=>Math.hypot(q.x-p.x,q.y-p.y)>=minDist)) kept.push(p); }
-  if(!kept.length) kept.push({x:Math.round(b.cx),y:Math.round(b.cy),v:thr});
+  for(const p of cand){
+    if(!kept.every(q=>Math.hypot(q.x-p.x,q.y-p.y)>=minDist)) continue;
+    if(!peakProminent(sig,w,h,p.x,p.y,prad,Math.max(3,(p.v-thr)*0.35))) continue;  // 줄/평탄 봉우리 탈락
+    kept.push(p);
+  }
   return kept;
 }
 /* peak 주변 (signal-floor) 가중 무게중심 → 정확한 spot 중심 */
@@ -649,7 +670,7 @@ function detectSpots(){
   const spotR=Math.max(4, Math.round(Math.min(w,bh)/45));
   const sig=boxBlurFast(sig0,w,bh,Math.max(1,Math.round(spotR/2)));   // 디노이즈
   // 가장자리 margin 제외(원점선·용매선·plate edge)
-  const mxg=Math.max(3,Math.round(w*0.02)), mtop=Math.max(3,Math.round(bh*0.03)), mbot=Math.max(4,Math.round(bh*0.05));
+  const mxg=Math.max(4,Math.round(w*0.045)), mtop=Math.max(3,Math.round(bh*0.03)), mbot=Math.max(4,Math.round(bh*0.05));
   for(let y=0;y<bh;y++) for(let x=0;x<w;x++){ if(x<mxg||x>=w-mxg||y<mtop||y>=bh-mbot) sig[y*w+x]=0; }
   // 적응 임계 (평탄화 신호 통계)
   let mean=0; for(let j=0;j<N;j++) mean+=sig[j]; mean/=N;
