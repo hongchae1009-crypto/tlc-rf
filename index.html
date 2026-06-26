@@ -212,7 +212,7 @@ input[type=range]{flex:1.6; accent-color:var(--blue);}
   </div>
   <div class="top-right">
     <button class="btn btn-warn" id="btnAuto" disabled>⚡ 전자동 분석</button>
-    <button class="btn btn-sm" id="btnLoad" title="세션(.json) 불러오기">📂 세션</button>
+    <button class="btn btn-sm" id="btnCalib" title="검출 정확도 보정(개발용)">🎯 정확도 보정</button>
     <button class="btn btn-sm" id="btnReset">새 이미지</button>
     <button class="btn btn-sm" id="btnHelp" title="사용법">❓ 도움말</button>
   </div>
@@ -1466,7 +1466,7 @@ $('#btnAuto').addEventListener('click', ()=>{
 
 /* ════════════ 입력 이벤트 ════════════ */
 $('#drop').addEventListener('click', ()=>$('#file').click());
-$('#btnLoad').addEventListener('click', ()=>$('#file').click());
+$('#btnCalib').addEventListener('click', ()=>{ location.hash='#calib'; checkCalibHash(); });
 $('#file').addEventListener('change', e=>{ if(e.target.files[0]) loadFromFile(e.target.files[0]); e.target.value=''; });
 const drop=$('#drop'), stage=$('#stage');
 ['dragenter','dragover'].forEach(ev=>stage.addEventListener(ev,e=>{e.preventDefault(); drop.classList.add('over');}));
