@@ -1310,11 +1310,16 @@ const PANEL = {
     </div>
     <div class="psec" style="margin-top:6px"><h4>내보내기</h4>
       <div class="row-btns">
-        <button class="btn btn-sm btn-p" id="bCopy">📋 표 복사</button>
+        <button class="btn btn-sm btn-g" id="bCopyAll">📋 표+이미지 복사 (연구노트)</button>
+        <button class="btn btn-sm" id="bSide">🖼️ 스팟+원본 1장</button>
+      </div>
+      <div class="row-btns" style="margin-top:6px">
+        <button class="btn btn-sm btn-p" id="bCopy">📋 표만 복사</button>
         <button class="btn btn-sm" id="bCsv">⬇ CSV</button>
         <button class="btn btn-sm" id="bPng">🖼️ 주석 이미지</button>
         <button class="btn btn-sm" id="bOrig">🖼️ 원본 이미지</button>
       </div>
+      <div class="phelp muted" style="margin-top:6px">‘표+이미지 복사’를 누르고 연구노트 절차/관찰/결과 칸에 <b>Ctrl+V</b> → Rf 표와 스팟·원본 이미지가 한 번에 들어갑니다.</div>
     </div>
     <div class="psec" style="margin-top:6px"><h4>세션 저장 (정답 데이터셋)</h4>
       <div class="field"><label>검출 방식</label>
@@ -1360,6 +1365,7 @@ function bindPanel(){
   // step5
   on('rLblSize','input',e=>{ S.labelScale=+e.target.value; const v=$('#vLblSize'); if(v) v.textContent=Math.round(S.labelScale*100)+'%'; render(); });
   on('bCopy','click',copyTable); on('bCsv','click',downloadCSV); on('bPng','click',downloadPNG); on('bOrig','click',downloadOriginal);
+  on('bCopyAll','click',copyForENotebook); on('bSide','click',downloadSideBySide);
   const sm=$('#selMod'); if(sm){ sm.value=S.modality||'uv254'; sm.addEventListener('change',e=>{ S.modality=e.target.value; }); }
   on('bSaveSession','click',saveSession);
   document.querySelectorAll('.lbl').forEach(inp=>inp.addEventListener('input',e=>{ S.laneLabels[+e.target.dataset.lane]=e.target.value; }));
@@ -1387,18 +1393,19 @@ function downloadCSV(){
   const blob=new Blob(['﻿'+t],{type:'text/csv;charset=utf-8'});
   triggerDownload(blob,'tlc-rf.csv'); toast('CSV 저장');
 }
-function downloadPNG(){
-  // 보정 이미지 + 오버레이를 offscreen에 그려 저장
+/* 보정 이미지 + spot/기준선 오버레이를 offscreen canvas로 렌더(공유). */
+function renderAnnotatedCanvas(){
   const r=S.rect, c=document.createElement('canvas'); c.width=r.w; c.height=r.h;
   const x=c.getContext('2d'); x.drawImage(r.canvas,0,0);
-  const prevView=view, prevCtx=ctx;        // drawAnalysis는 전역 ctx/view 사용 → 임시 교체
-  /* eslint-disable no-global-assign */
-  view=r; window._octx=x;
-  // 간이 재그리기 (step4 핸들 제외, 결과용)
+  const prevView=view; view=r;             // drawOnto/drawRfLabels 전역 view 사용 → 임시 교체
   const u={lw:Math.max(2,r.w/350), r:Math.max(9,r.w/55), font:Math.max(13,r.w/42)};
   drawOnto(x,u);
   view=prevView;
-  c.toBlob(b=>{ triggerDownload(b,'tlc-rf.png'); toast('주석 이미지 저장'); });
+  return c;
+}
+function downloadPNG(){
+  if(!S.rect){ toast('보정된 이미지가 없습니다'); return; }
+  renderAnnotatedCanvas().toBlob(b=>{ triggerDownload(b,'tlc-rf.png'); toast('주석 이미지 저장'); });
 }
 function downloadOriginal(){
   // 마커 없는 보정 플레이트(원본 TLC) 저장
@@ -1406,6 +1413,39 @@ function downloadOriginal(){
   const r=S.rect, c=document.createElement('canvas'); c.width=r.w; c.height=r.h;
   c.getContext('2d').drawImage(r.canvas,0,0);
   c.toBlob(b=>{ triggerDownload(b,'tlc-original.png'); toast('원본 이미지 저장'); });
+}
+/* 스팟체크 + 원본을 좌우로 합친 1장 (ELN 첨부용 — 흐린 spot 확인 가능) */
+function downloadSideBySide(){
+  if(!S.rect){ toast('보정된 이미지가 없습니다'); return; }
+  const r=S.rect, gap=Math.max(10,Math.round(r.w*0.04)), capH=Math.max(20,Math.round(r.w*0.085));
+  const annC=renderAnnotatedCanvas();
+  const W=r.w*2+gap, H=r.h+capH, c=document.createElement('canvas'); c.width=W; c.height=H;
+  const x=c.getContext('2d'); x.fillStyle='#fff'; x.fillRect(0,0,W,H);
+  x.save(); x.fillStyle='#1a1c21'; x.font=`600 ${Math.max(12,Math.round(r.w*0.05))}px sans-serif`; x.textBaseline='middle';
+  x.fillText('스팟 체크', 4, capH/2); x.fillText('원본', r.w+gap+4, capH/2); x.restore();
+  x.drawImage(annC, 0, capH);
+  x.drawImage(r.canvas, r.w+gap, capH);
+  c.toBlob(b=>{ triggerDownload(b,'tlc-rf-비교.png'); toast('스팟+원본 이미지 저장'); });
+}
+/* 연구노트 붙여넣기용: Rf 표 + (스팟·원본)이미지를 HTML 클립보드로 한 번에 복사 */
+async function copyForENotebook(){
+  if(!S.rect){ toast('보정된 이미지가 없습니다'); return; }
+  const rows=resultRows();
+  let tbl='<table border="1" cellpadding="4" style="border-collapse:collapse;font-family:sans-serif;font-size:13px">'
+    +'<thead><tr><th>레인</th><th>라벨</th><th>Spot</th><th>Rf</th></tr></thead><tbody>';
+  rows.forEach(r=> tbl+=`<tr><td>${r.lane}</td><td>${esc(r.label)}</td><td style="text-align:center">#${r.n}</td><td style="text-align:right">${r.rf.toFixed(3)}</td></tr>`);
+  tbl+='</tbody></table>';
+  const ann=renderAnnotatedCanvas().toDataURL('image/png'), org=S.rect.canvas.toDataURL('image/png');
+  const html=`${tbl}<p style="margin-top:8px"><img src="${ann}" alt="스팟 체크" style="max-width:340px;border:1px solid #ccc">`
+    +` <img src="${org}" alt="원본" style="max-width:340px;border:1px solid #ccc"></p>`;
+  let plain='레인\t라벨\tSpot\tRf\n'; rows.forEach(r=> plain+=`${r.lane}\t${r.label}\t#${r.n}\t${r.rf.toFixed(3)}\n`);
+  try{
+    await navigator.clipboard.write([new ClipboardItem({
+      'text/html': new Blob([html],{type:'text/html'}),
+      'text/plain': new Blob([plain],{type:'text/plain'})
+    })]);
+    toast('표+이미지 복사됨 — 노트에 Ctrl+V');
+  }catch(e){ toast('복사 실패(브라우저가 이미지 클립보드 미지원일 수 있음)'); }
 }
 function drawOnto(x,u){
   const seg=(line,color,label)=>{
