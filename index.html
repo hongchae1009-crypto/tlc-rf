@@ -335,6 +335,12 @@ const TUNE = {
   bgDiv:    4,        // 배경 블러 반경 = min(w,bh)/bgDiv
   minAreaF: 0.18,     // minArea = PI*spotR^2*minAreaF
   dedupF:   1.3,      // 중복 제거 거리 = spotR*dedupF
+  /* 레인 컬럼 1D 저임계 보강(흐린 spot 회수). 실제 14장 측정 결과 놓친 spot의
+     74%가 레인 안에서도 z<3(노이즈 수준)이라 회수 시 FP가 더 늘어 F1이 하락 →
+     기본 OFF. 더 깨끗한(흐린 spot이 분리되는) 플레이트에선 켜서 쓸 수 있음. */
+  laneAware: false,
+  laneK:    4.0,      // 레인 로컬 임계 = median + laneK*MAD
+  laneThrF: 0.55,     // 레인 임계 하한 = 전역 thr*laneThrF (전역보다 낮게)
 };
 
 /* ── 전역 상태 ───────────────────────────────────────────── */
@@ -709,6 +715,63 @@ function weightedCentroid(sig,w,h,px,py,rad,floor){
   }
   return sw>0 ? {x:sx/sw, y:sy/sw} : {x:px, y:py};
 }
+/* ── 레인 기반 보강용 1D 유틸 ── */
+function boxBlur1D(a,r){ if(r<1) return a.slice(); const n=a.length,o=new Float32Array(n),pre=new Float32Array(n+1);
+  for(let i=0;i<n;i++) pre[i+1]=pre[i]+a[i];
+  for(let i=0;i<n;i++){ const lo=Math.max(0,i-r),hi=Math.min(n-1,i+r); o[i]=(pre[hi+1]-pre[lo])/(hi-lo+1); } return o; }
+/* 1D 봉우리: thr 초과 국소최대 중, 양옆 골(saddle)보다 prom 이상 솟은 것만(잡파 제거) */
+function peaks1D(p,minDist,thr,prom){
+  const n=p.length, cand=[];
+  for(let i=1;i<n-1;i++){ if(p[i]<thr) continue; if(p[i]>=p[i-1]&&p[i]>=p[i+1]) cand.push(i); }
+  cand.sort((a,b)=>p[b]-p[a]);
+  const kept=[];
+  for(const i of cand){
+    if(!kept.every(j=>Math.abs(j-i)>=minDist)) continue;
+    let lmin=p[i]; for(let k=i-1;k>=0;k--){ if(p[k]>p[i]) break; if(p[k]<lmin) lmin=p[k]; }
+    let rmin=p[i]; for(let k=i+1;k<n;k++){ if(p[k]>p[i]) break; if(p[k]<rmin) rmin=p[k]; }
+    if(p[i]-Math.max(lmin,rmin) < prom) continue;            // prominence 부족 → 잡파
+    kept.push(i);
+  }
+  return kept;
+}
+/* 레인 x중심: 컬럼 신호합 프로파일의 봉우리 */
+function laneCenters(sig,w,bh,spotR){
+  const col=new Float32Array(w);
+  for(let x=0;x<w;x++){ let s=0; for(let y=0;y<bh;y++) s+=sig[y*w+x]; col[x]=s; }
+  const sm=boxBlur1D(col, Math.max(2,Math.round(spotR)));
+  let mx=0; for(const v of sm) mx=Math.max(mx,v); if(mx<=0) return [];
+  const minGap=Math.max(Math.round(spotR*2), Math.round(w*0.05));
+  return peaks1D(sm, minGap, mx*0.12, mx*0.05);
+}
+function median(a){ const s=[...a].sort((x,y)=>x-y); return s.length? s[s.length>>1]:0; }
+/* 레인 컬럼 안에서 1D 저임계 봉우리 → 흐린 spot 회수. 전역 thr보다 낮은 레인 로컬 임계 사용. */
+function laneAugment(sig,w,bh,y0,spotR,gThr){
+  const lanes=laneCenters(sig,w,bh,spotR);
+  if(!lanes.length) return;
+  // 레인 반폭 = 인접 간격 절반(없으면 spotR*1.5), [spotR, w*0.12] 클램프
+  let hw=Math.round(w*0.06);
+  if(lanes.length>1){ const gaps=[]; for(let i=1;i<lanes.length;i++) gaps.push(lanes[i]-lanes[i-1]); hw=Math.round(median(gaps)*0.45); }
+  hw=Math.max(spotR, Math.min(hw, Math.round(w*0.12)));
+  const added=[];
+  for(const lx of lanes){
+    const x0=Math.max(0,lx-hw), x1=Math.min(w-1,lx+hw);
+    const prof=new Float32Array(bh);
+    for(let y=0;y<bh;y++){ let m=0; for(let x=x0;x<=x1;x++){ const v=sig[y*w+x]; if(v>m)m=v; } prof[y]=m; }
+    const sm=boxBlur1D(prof, Math.max(1,Math.round(spotR/2)));
+    const med=median(sm);
+    const dev=new Float32Array(bh); for(let y=0;y<bh;y++) dev[y]=Math.abs(sm[y]-med);
+    const mad=median(dev)*1.4826 || 1;
+    const laneThr=Math.max(gThr*TUNE.laneThrF, med+TUNE.laneK*mad);     // 전역보다 낮게(레인 내 노이즈 작음)
+    const minDistY=Math.max(Math.round(spotR*1.2),5);
+    const prom=Math.max(4,(laneThr-med)*0.8);
+    for(const y of peaks1D(sm,minDistY,laneThr,prom)){
+      const c=weightedCentroid(sig,w,bh,lx,y,Math.min(hw,Math.round(spotR*1.5)),laneThr*0.5);
+      added.push({x:Math.round(c.x), y:Math.round(c.y)+y0, lane:0});
+    }
+  }
+  // 기존 spot과 너무 가까우면 버리고 추가
+  for(const s of added){ if(S.spots.every(t=>Math.hypot(t.x-s.x,t.y-s.y)>=spotR*TUNE.dedupF)) S.spots.push(s); }
+}
 /* ── spot 검출: 조명 평탄화 → quench/색 신호 → 적응임계 → 모양필터·분리·가중중심 ── */
 function detectSpots(){
   const {canvas,w}=S.rect, H=S.rect.h;
@@ -756,6 +819,7 @@ function detectSpots(){
   // 너무 가까운 중복 제거
   S.spots=[];
   for(const s of out){ if(S.spots.every(t=>Math.hypot(t.x-s.x,t.y-s.y)>=spotR*TUNE.dedupF)) S.spots.push(s); }
+  if(TUNE.laneAware) laneAugment(sig,w,bh,y0,spotR,thr);        // 레인 컬럼 저임계 보강(흐린 spot 회수)
   S._sig={data:sig, w, h:bh, y0, spotR, thr};                  // 수동 추가 스냅용
   clusterLanes(); assignLanes(); S.sel=null; S.selLane=null;
 }
@@ -1459,7 +1523,9 @@ async function evalSample(obj, opt){
 }
 function calOpt(){
   const v=id=>+document.getElementById(id).value;
-  Object.assign(TUNE,{ promDrop:v('cPromDrop'), edgeMrg:v('cEdge'), aspectMax:v('cAspect'), spotDiv:v('cSpotDiv'), colorW:v('cColorW'), bgDiv:v('cBgDiv') });
+  Object.assign(TUNE,{ promDrop:v('cPromDrop'), edgeMrg:v('cEdge'), aspectMax:v('cAspect'), spotDiv:v('cSpotDiv'),
+    colorW:v('cColorW'), bgDiv:v('cBgDiv'), minAreaF:v('cMinArea'), dedupF:v('cDedup'),
+    laneAware:document.getElementById('cLane').checked, laneK:v('cLaneK'), laneThrF:v('cLaneThrF') });
   return { sens:v('cSens'), tol:v('cTol'), autoPol:document.getElementById('cAutoPol').checked, polarity:document.getElementById('cPolarity').value };
 }
 function f1(tp,fp,fn){ const p=tp/(tp+fp||1), r=tp/(tp+fn||1); return {p,r,f:2*p*r/((p+r)||1)}; }
@@ -1520,16 +1586,21 @@ function initCalib(){
         <div id="cCount" style="font-size:12px;color:#666;margin:6px 0 12px">0개 로드됨</div>
         <div style="font-weight:700;margin-bottom:8px">파라미터</div>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:7px">
-          ${n('cSens','감도',1.3,0.1)}
-          ${n('cPromDrop','prom',0.35,0.05)}
+          ${n('cSens','감도',1.5,0.1)}
+          ${n('cPromDrop','prom',0,0.05)}
           ${n('cEdge','여백%',0.045,0.005)}
           ${n('cAspect','막대',4,0.5)}
-          ${n('cSpotDiv','spotDiv',45,1)}
+          ${n('cSpotDiv','spotDiv',25,1)}
           ${n('cColorW','색가중',0.85,0.05)}
-          ${n('cBgDiv','bgDiv',7,1)}
+          ${n('cBgDiv','bgDiv',4,1)}
+          ${n('cMinArea','minAreaF',0.18,0.02)}
+          ${n('cDedup','dedupF',1.3,0.1)}
           ${n('cTol','tol·H',0.03,0.005)}
+          ${n('cLaneK','laneK',4,0.5)}
+          ${n('cLaneThrF','laneThrF',0.55,0.05)}
         </div>
-        <label style="display:flex;gap:6px;align-items:center;font-size:12px;margin-top:9px"><input id="cAutoPol" type="checkbox" checked> 방식별 극성 자동(uv365=bright)</label>
+        <label style="display:flex;gap:6px;align-items:center;font-size:12px;margin-top:9px"><input id="cLane" type="checkbox"> 레인 보강(laneAware)</label>
+        <label style="display:flex;gap:6px;align-items:center;font-size:12px;margin-top:6px"><input id="cAutoPol" type="checkbox" checked> 방식별 극성 자동(uv365=bright)</label>
         <label style="display:flex;gap:6px;align-items:center;font-size:12px;margin-top:6px">고정 극성<select id="cPolarity" style="padding:3px"><option value="dark">dark</option><option value="bright">bright</option><option value="both">both</option></select></label>
         <button id="cRun" class="btn btn-p" style="width:100%;margin-top:12px">▶ 평가 실행</button>
         <div style="font-size:11px;color:#888;margin-top:8px">파라미터 조정 → 평가 실행 반복으로 전체 F1을 최대화하세요.</div>
