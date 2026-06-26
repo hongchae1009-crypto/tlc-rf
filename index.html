@@ -357,7 +357,7 @@ const S = {
   spots: [],                  // {x, y, lane}  rect 좌표 (자유 위치)
   sel: null,                  // 선택된 spot index
   selLane: null,              // 선택된 레인 index (모바일 삭제용)
-  sens: 1.5,                  // spot 검출 감도 k (작을수록 민감)
+  sens: 0.7,                  // spot 검출 감도 k (작을수록 민감) — 검토도구라 재현율 우선(놓침<오검출)
   modality: 'uv254',          // 검출 방식 태그(uv254|color|iodine|uv365) — 세션/데이터셋용
   zoom: 1, panX: 0, panY: 0,  // 모바일 캔버스 줌/팬 (transform)
   peek: false,                // 결과 단계에서 길게 누르면 마커 없는 원본 미리보기
@@ -1269,7 +1269,7 @@ const PANEL = {
     <div class="phelp">자동 검출된 spot을 확인하세요. <b>드래그</b>로 이동, 빈 곳 <b>탭/클릭</b>으로 추가. 삭제 — <b>모바일</b>: spot/레인 핸들을 탭해 선택 → 빨간 ✕ 탭. <b>PC</b>: 우클릭(또는 선택 후 Delete·‘선택 삭제’). <span class="muted">Ctrl+Z 되돌리기.</span></div>
     <div class="psec"><h4>자동 검출</h4>
       <div class="field"><label>감도 <span class="muted">(둔감←→민감)</span></label>
-        <input type="range" id="rSens" min="0.4" max="3" step="0.1" value="${(3.4-S.sens).toFixed(1)}"><span class="val" id="vSens">●</span></div>
+        <input type="range" id="rSens" min="0.4" max="3.4" step="0.1" value="${(3.4-S.sens).toFixed(1)}"><span class="val" id="vSens">●</span></div>
       <div class="row-btns">
         <button class="btn btn-sm" id="bDetectAll">다시 검출</button>
         <button class="btn btn-sm" id="bDelSel" ${S.sel==null?'disabled':''}>선택 삭제</button>
@@ -1586,7 +1586,7 @@ function initCalib(){
         <div id="cCount" style="font-size:12px;color:#666;margin:6px 0 12px">0개 로드됨</div>
         <div style="font-weight:700;margin-bottom:8px">파라미터</div>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:7px">
-          ${n('cSens','감도',1.5,0.1)}
+          ${n('cSens','감도',0.7,0.1)}
           ${n('cPromDrop','prom',0,0.05)}
           ${n('cEdge','여백%',0.045,0.005)}
           ${n('cAspect','막대',4,0.5)}
