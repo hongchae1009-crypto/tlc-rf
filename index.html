@@ -212,7 +212,6 @@ input[type=range]{flex:1.6; accent-color:var(--blue);}
   </div>
   <div class="top-right">
     <button class="btn btn-warn" id="btnAuto" disabled>⚡ 전자동 분석</button>
-    <button class="btn btn-sm" id="btnCalib" title="검출 정확도 보정(개발용)">🎯 정확도 보정</button>
     <button class="btn btn-sm" id="btnReset">새 이미지</button>
     <button class="btn btn-sm" id="btnHelp" title="사용법">❓ 도움말</button>
   </div>
@@ -1466,7 +1465,12 @@ $('#btnAuto').addEventListener('click', ()=>{
 
 /* ════════════ 입력 이벤트 ════════════ */
 $('#drop').addEventListener('click', ()=>$('#file').click());
-$('#btnCalib').addEventListener('click', ()=>{ location.hash='#calib'; checkCalibHash(); });
+/* 숨겨진 진입(이스터에그): 로고를 1.5초 내 5번 탭 → 정확도 보정 하니스(#calib).
+   아는 사람만 — 일반 UI엔 노출 안 함. URL 해시 #calib 직접 입력으로도 진입 가능. */
+(function(){ const logo=document.querySelector('.logo'); if(!logo) return;
+  let taps=0, t; logo.style.userSelect='none';
+  logo.addEventListener('click', ()=>{ taps++; clearTimeout(t); t=setTimeout(()=>taps=0,1500);
+    if(taps>=5){ taps=0; location.hash='#calib'; checkCalibHash(); toast('정확도 보정 모드'); } }); })();
 $('#file').addEventListener('change', e=>{ if(e.target.files[0]) loadFromFile(e.target.files[0]); e.target.value=''; });
 const drop=$('#drop'), stage=$('#stage');
 ['dragenter','dragover'].forEach(ev=>stage.addEventListener(ev,e=>{e.preventDefault(); drop.classList.add('over');}));
