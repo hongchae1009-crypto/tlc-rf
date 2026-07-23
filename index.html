@@ -912,12 +912,7 @@ function render(){
   ctx.clearRect(0,0,cv.width,cv.height);
   ctx.drawImage(view.canvas,0,0);
   const u=uiScale();
-  if(S.peek){      // 길게 누르는 동안: 오버레이 없이 원본 TLC만
-    ctx.fillStyle='rgba(20,30,50,.55)'; ctx.font=`600 ${u.font}px 'Pretendard','Apple SD Gothic Neo',sans-serif`;
-    const t='원본 TLC — 클릭하면 주석 보기', tw=ctx.measureText(t).width;
-    ctx.fillRect(8,8,tw+18,u.font+12); ctx.fillStyle='#fff'; ctx.fillText(t,17,8+u.font);
-    return;
-  }
+  if(S.peek) return;               // 원본 보기: 마커·라벨 없이 이미지만
   if(S.step===2) drawCorners(u);
   else if(S.step>=3) drawAnalysis(u);
   // 코너 드래그 중 돋보기
