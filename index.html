@@ -302,7 +302,7 @@ input[type=range]{flex:1.6; accent-color:var(--blue);}
       <li>레인·spot별 <b>Rf 표</b> · 레인 라벨(화합물명) 입력 가능 · <b>RF 글씨 크기</b> 슬라이더</li>
       <li>내보내기 — <b>복사</b>(Ctrl+V로 바로 붙여넣기): 표+이미지 한 번에 · 표만 · 주석 이미지 · 원본 이미지</li>
       <li>내보내기 — <b>파일 저장</b>: CSV · 주석 이미지 · 원본 이미지 · 스팟+원본 1장</li>
-      <li>이미지를 <b>0.5초 길게 누르면</b> 마커 없는 원본이 보임(떼면 복귀)</li>
+      <li>이미지를 <b>클릭</b>하면 마커 없는 원본, 다시 클릭하면 주석 이미지로 전환</li>
     </ul>
 
     <div class="tip">💡 <b>⚡ 전자동 분석</b>은 전 과정을 한 번에 처리한 뒤 결과로 이동합니다(④에서 검토·수정 가능).
@@ -914,7 +914,7 @@ function render(){
   const u=uiScale();
   if(S.peek){      // 길게 누르는 동안: 오버레이 없이 원본 TLC만
     ctx.fillStyle='rgba(20,30,50,.55)'; ctx.font=`600 ${u.font}px 'Pretendard','Apple SD Gothic Neo',sans-serif`;
-    const t='원본 TLC (누르는 중)', tw=ctx.measureText(t).width;
+    const t='원본 TLC — 클릭하면 주석 보기', tw=ctx.measureText(t).width;
     ctx.fillRect(8,8,tw+18,u.font+12); ctx.fillStyle='#fff'; ctx.fillText(t,17,8+u.font);
     return;
   }
@@ -1067,8 +1067,8 @@ function toImg(e){
 }
 let drag=null; // {type, idx}
 const pointers=new Map(); let gesture=null;
-let pressTimer=null, peekStart=null;
-function cancelPress(){ if(pressTimer){ clearTimeout(pressTimer); pressTimer=null; } if(S.peek){ S.peek=false; render(); } }
+let peekStart=null, tapMoved=false;
+function cancelPress(){ peekStart=null; }      // 탭 추적만 해제(원본 보기 상태는 유지)
 cv.addEventListener('pointerdown', e=>{
   if(!view) return;
   pointers.set(e.pointerId,{x:e.clientX,y:e.clientY});
@@ -1081,7 +1081,7 @@ cv.addEventListener('pointerdown', e=>{
   }
   if(gesture) return;
   // 결과 단계: 1.5초 길게 누르면 마커 없는 원본 TLC 미리보기
-  if(S.step===5){ peekStart={x:e.clientX,y:e.clientY}; pressTimer=setTimeout(()=>{ pressTimer=null; S.peek=true; render(); },500); return; }
+  if(S.step===5){ peekStart={x:e.clientX,y:e.clientY}; tapMoved=false; return; }   // 탭=원본/주석 토글(pointerup에서 처리)
   const p=toImg(e), u=uiScale(), hit=u.r*1.8;
   // 선분의 어느 부분을 잡았는지: 왼끝/오른끝(기울기) vs 가운데(평행 이동)
   const lineGrab=(line)=>{
@@ -1129,7 +1129,7 @@ cv.addEventListener('pointerdown', e=>{
 });
 cv.addEventListener('pointermove', e=>{
   if(pointers.has(e.pointerId)) pointers.set(e.pointerId,{x:e.clientX,y:e.clientY});
-  if(pressTimer && peekStart && Math.hypot(e.clientX-peekStart.x,e.clientY-peekStart.y)>12){ clearTimeout(pressTimer); pressTimer=null; }
+  if(peekStart && Math.hypot(e.clientX-peekStart.x,e.clientY-peekStart.y)>12) tapMoved=true;   // 드래그면 토글 취소
   if(gesture && pointers.size>=2){             // 핀치 줌 + 팬
     const pt=[...pointers.values()];
     const d=Math.hypot(pt[0].x-pt[1].x,pt[0].y-pt[1].y), mx=(pt[0].x+pt[1].x)/2, my=(pt[0].y+pt[1].y)/2;
@@ -1159,7 +1159,8 @@ cv.addEventListener('pointermove', e=>{
 function endPointer(e){
   pointers.delete(e.pointerId);
   if(pointers.size<2) gesture=null;
-  cancelPress();                                // 길게누르기 타이머/미리보기 해제
+  if(S.step===5 && peekStart && !tapMoved){ S.peek=!S.peek; render(); }   // 클릭 1회 = 원본↔주석 전환
+  cancelPress();
   if(drag&&(drag.type==='spot'||drag.type==='lane')) refreshPanel();
   if(drag&&drag.type==='corner') render();      // 돋보기 제거
   drag=null;
@@ -1192,7 +1193,7 @@ window.addEventListener('keydown', e=>{
 
 /* ════════════ 단계 전환 & 패널 ════════════ */
 function goStep(n){
-  S.step=n;
+  S.step=n; S.peek=false;            // 단계 이동 시 원본 보기 해제
   // 뷰 이미지 결정
   if(n===1){ $('#drop').style.display='block'; $('#cvWrap').style.display='none'; }
   else { $('#drop').style.display='none'; $('#cvWrap').style.display='flex';
@@ -1308,7 +1309,7 @@ const PANEL = {
     });
     return `
     <div class="ptitle"><span class="ico">∑</span> 결과 & 내보내기</div>
-    <div class="phelp">Rf = (원점→spot 거리) / (원점→용매front 거리). 레인 라벨(화합물명)을 입력할 수 있습니다. <span class="muted">이미지를 0.5초 길게 누르면 마커 없는 원본이 보입니다(떼면 복귀).</span></div>
+    <div class="phelp">Rf = (원점→spot 거리) / (원점→용매front 거리). 레인 라벨(화합물명)을 입력할 수 있습니다. <span class="muted">이미지를 <b>클릭</b>하면 마커 없는 원본, 다시 클릭하면 주석 이미지로 돌아옵니다.</span></div>
     <table class="tbl"><thead><tr><th>레인 / 라벨</th><th>Spot</th><th>Rf</th></tr></thead><tbody>${rows||'<tr><td colspan=3 class=muted>spot이 없습니다</td></tr>'}</tbody></table>
     <div class="psec" style="margin-top:16px"><h4>Rf 라벨 글씨 크기</h4>
       <div class="field"><label>작게 ↔ 크게</label><input type="range" id="rLblSize" min="0.6" max="2.4" step="0.1" value="${S.labelScale}"><span class="val" id="vLblSize">${Math.round(S.labelScale*100)}%</span></div>
