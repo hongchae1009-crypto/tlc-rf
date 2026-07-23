@@ -364,6 +364,8 @@ const S = {
   zoom: 1, panX: 0, panY: 0,  // 모바일 캔버스 줌/팬 (transform)
   peek: false,                // 결과 단계에서 길게 누르면 마커 없는 원본 미리보기
   labelScale: 1,              // Rf(피크) 라벨 글씨 크기 배율
+  imgFmt: 'jpeg',             // 내보내기 이미지 형식 (jpeg=작게 권장 | png=무손실)
+  imgMax: 1000,               // 내보내기 이미지 긴 변 상한(px)
 };
 let view = null;              // 현재 캔버스에 그려진 이미지 {canvas,w,h}
 
@@ -1329,8 +1331,16 @@ const PANEL = {
         <button class="btn btn-sm" id="bOrig">⬇ 원본 이미지</button>
         <button class="btn btn-sm" id="bSide">⬇ 스팟+원본 1장</button>
       </div>
-      <div class="phelp muted" style="margin-top:9px">‘표 + 이미지 복사’ 후 연구노트 칸에 <b>Ctrl+V</b> → Rf 표와 스팟·원본 이미지가 한 번에 들어갑니다.
-        이미지만 필요하면 <b>주석/원본 이미지 복사</b>를 누르고 바로 붙여넣으세요.</div>
+      <div class="exp-lbl">이미지 용량</div>
+      <div class="field"><label>형식</label>
+        <select id="selImgFmt" style="flex:1.6;min-height:32px;border:1px solid var(--bd2);border-radius:8px;padding:3px 8px;font-family:var(--f);font-size:12.5px">
+          <option value="jpeg"${S.imgFmt==='jpeg'?' selected':''}>JPEG — 용량 작게 (권장)</option>
+          <option value="png"${S.imgFmt==='png'?' selected':''}>PNG — 무손실 (약 4~10배 큼)</option>
+        </select></div>
+      <div class="field"><label>최대 크기</label>
+        <input type="range" id="rImgMax" min="600" max="1600" step="100" value="${S.imgMax}"><span class="val" id="vImgMax">${S.imgMax}px</span></div>
+      <div class="phelp muted" style="margin-top:9px">‘표 + 이미지 복사’ 후 연구노트 칸에 <b>Ctrl+V</b> → Rf 표와 스팟·원본 이미지가 한 번에 들어갑니다(JPEG·900px로 압축, 약 100KB).
+        이미지만 필요하면 <b>주석/원본 이미지 복사</b>를 누르고 붙여넣으세요 — <span class="muted">클립보드 이미지는 브라우저 제약으로 PNG만 가능하니, 용량이 중요하면 ‘표 + 이미지 복사’나 파일 저장(JPEG)을 쓰세요.</span></div>
     </div>
     <div class="psec" style="margin-top:6px"><h4>세션 저장 (정답 데이터셋)</h4>
       <div class="field"><label>검출 방식</label>
@@ -1378,6 +1388,8 @@ function bindPanel(){
   on('bCopy','click',copyTable); on('bCsv','click',downloadCSV); on('bPng','click',downloadPNG); on('bOrig','click',downloadOriginal);
   on('bCopyAll','click',copyForENotebook); on('bSide','click',downloadSideBySide);
   on('bCopyImg','click',copyAnnotatedImage); on('bCopyOrig','click',copyOriginalImage);
+  on('selImgFmt','change',e=>{ S.imgFmt=e.target.value; });
+  on('rImgMax','input',e=>{ S.imgMax=+e.target.value; const v=$('#vImgMax'); if(v) v.textContent=S.imgMax+'px'; });
   const sm=$('#selMod'); if(sm){ sm.value=S.modality||'uv254'; sm.addEventListener('change',e=>{ S.modality=e.target.value; }); }
   on('bSaveSession','click',saveSession);
   document.querySelectorAll('.lbl').forEach(inp=>inp.addEventListener('input',e=>{ S.laneLabels[+e.target.dataset.lane]=e.target.value; }));
@@ -1415,25 +1427,52 @@ function renderAnnotatedCanvas(){
   view=prevView;
   return c;
 }
+/* ── 용량 최적화 인코딩: 긴 변 상한으로 축소 + JPEG/PNG 선택 ──
+   사진(TLC)은 PNG가 매우 큼(1000px 기준 ~420KB) → JPEG면 1/4~1/10. */
+function scaledCanvas(src,maxSide){
+  const m=Math.max(src.width,src.height);
+  if(!maxSide || m<=maxSide) return src;
+  const s=maxSide/m, c=document.createElement('canvas');
+  c.width=Math.max(1,Math.round(src.width*s)); c.height=Math.max(1,Math.round(src.height*s));
+  const g=c.getContext('2d'); g.imageSmoothingEnabled=true; g.imageSmoothingQuality='high';
+  g.drawImage(src,0,0,c.width,c.height);
+  return c;
+}
+const imgMime =()=> S.imgFmt==='png' ? 'image/png' : 'image/jpeg';
+const imgExt  =()=> S.imgFmt==='png' ? 'png' : 'jpg';
+function encodeBlob(c,maxSide,q){
+  const cc=scaledCanvas(c, maxSide||S.imgMax);
+  return new Promise(res=>cc.toBlob(res, imgMime(), q||0.88));
+}
+function encodeDataURL(c,maxSide,q){
+  return scaledCanvas(c, maxSide||S.imgMax).toDataURL(imgMime(), q||0.85);
+}
 function downloadPNG(){
   if(!S.rect){ toast('보정된 이미지가 없습니다'); return; }
-  renderAnnotatedCanvas().toBlob(b=>{ triggerDownload(b,'tlc-rf.png'); toast('주석 이미지 저장'); });
+  encodeBlob(renderAnnotatedCanvas()).then(b=>{
+    triggerDownload(b,`tlc-rf.${imgExt()}`); toast(`주석 이미지 저장 (${Math.round(b.size/1024)} KB)`);
+  });
 }
 function downloadOriginal(){
   // 마커 없는 보정 플레이트(원본 TLC) 저장
   if(!S.rect){ toast('보정된 이미지가 없습니다'); return; }
   const r=S.rect, c=document.createElement('canvas'); c.width=r.w; c.height=r.h;
   c.getContext('2d').drawImage(r.canvas,0,0);
-  c.toBlob(b=>{ triggerDownload(b,'tlc-original.png'); toast('원본 이미지 저장'); });
+  encodeBlob(c).then(b=>{
+    triggerDownload(b,`tlc-original.${imgExt()}`); toast(`원본 이미지 저장 (${Math.round(b.size/1024)} KB)`);
+  });
 }
 /* ── 이미지를 PNG로 클립보드 복사 (Ctrl+V로 바로 붙여넣기) ──
    Safari 호환을 위해 Blob이 아닌 Promise<Blob>을 ClipboardItem에 그대로 전달. */
-function canvasBlob(c){ return new Promise(res=>c.toBlob(res,'image/png')); }
+/* 클립보드 이미지는 브라우저가 PNG만 허용 → 형식은 못 바꾸고 크기(긴 변)로 용량을 줄인다. */
+function canvasBlob(c){ return new Promise(res=>scaledCanvas(c,S.imgMax).toBlob(res,'image/png')); }
 async function copyCanvasImage(c,label){
   try{
     if(!navigator.clipboard || !window.ClipboardItem) throw new Error('unsupported');
-    await navigator.clipboard.write([new ClipboardItem({'image/png': canvasBlob(c)})]);
-    toast(label+' 복사됨 — Ctrl+V로 붙여넣기');
+    const bp=canvasBlob(c);
+    await navigator.clipboard.write([new ClipboardItem({'image/png': bp})]);
+    const b=await bp;
+    toast(`${label} 복사됨 (${Math.round(b.size/1024)} KB, PNG) — Ctrl+V`);
   }catch(e){ toast('이미지 복사 미지원 브라우저 — ‘저장’ 버튼을 쓰세요'); }
 }
 function copyAnnotatedImage(){
@@ -1457,7 +1496,7 @@ function downloadSideBySide(){
   x.fillText('스팟 체크', 4, capH/2); x.fillText('원본', r.w+gap+4, capH/2); x.restore();
   x.drawImage(annC, 0, capH);
   x.drawImage(r.canvas, r.w+gap, capH);
-  c.toBlob(b=>{ triggerDownload(b,'tlc-rf-비교.png'); toast('스팟+원본 이미지 저장'); });
+  encodeBlob(c, 1600).then(b=>{ triggerDownload(b,`tlc-rf-비교.${imgExt()}`); toast(`스팟+원본 저장 (${Math.round(b.size/1024)} KB)`); });
 }
 /* 연구노트 붙여넣기용: Rf 표 + (스팟·원본)이미지를 HTML 클립보드로 한 번에 복사 */
 async function copyForENotebook(){
@@ -1467,16 +1506,18 @@ async function copyForENotebook(){
     +'<thead><tr><th>레인</th><th>라벨</th><th>Spot</th><th>Rf</th></tr></thead><tbody>';
   rows.forEach(r=> tbl+=`<tr><td>${r.lane}</td><td>${esc(r.label)}</td><td style="text-align:center">#${r.n}</td><td style="text-align:right">${r.rf.toFixed(3)}</td></tr>`);
   tbl+='</tbody></table>';
-  const ann=renderAnnotatedCanvas().toDataURL('image/png'), org=S.rect.canvas.toDataURL('image/png');
+  // 노트에는 340px로 보이므로 900px·JPEG로 인코딩 → 용량 1/10 수준
+  const ann=encodeDataURL(renderAnnotatedCanvas(),900,0.85), org=encodeDataURL(S.rect.canvas,900,0.85);
   const html=`${tbl}<p style="margin-top:8px"><img src="${ann}" alt="스팟 체크" style="max-width:340px;border:1px solid #ccc">`
     +` <img src="${org}" alt="원본" style="max-width:340px;border:1px solid #ccc"></p>`;
+  const kb=Math.round((ann.length+org.length)/1024);
   let plain='레인\t라벨\tSpot\tRf\n'; rows.forEach(r=> plain+=`${r.lane}\t${r.label}\t#${r.n}\t${r.rf.toFixed(3)}\n`);
   try{
     await navigator.clipboard.write([new ClipboardItem({
       'text/html': new Blob([html],{type:'text/html'}),
       'text/plain': new Blob([plain],{type:'text/plain'})
     })]);
-    toast('표+이미지 복사됨 — 노트에 Ctrl+V');
+    toast(`표+이미지 복사됨 (${kb} KB) — 노트에 Ctrl+V`);
   }catch(e){ toast('복사 실패(브라우저가 이미지 클립보드 미지원일 수 있음)'); }
 }
 function drawOnto(x,u){
